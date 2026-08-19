@@ -69,7 +69,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         guard let url = URL(string: "\(serverUrl)?action=get_events&token=\(apiToken)") else { return }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 6.0
+        request.timeoutInterval = 12.0
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 
         URLSession.shared.dataTask(with: request) { data, response, error in
