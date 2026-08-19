@@ -185,30 +185,28 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
     // Helper: Generador de WAV Silencioso
     private func createSilentWavData() -> Data {
         var data = Data()
-        // Header WAV PCM 8000Hz 16-bit Mono silencioso
         data.append(contentsOf: "RIFF".utf8)
-        let chunkSize: UInt32 = 36 + 8000 * 2
-        data.append(Data(from: chunkSize))
+        var chunkSize: UInt32 = 36 + 8000 * 2
+        withUnsafeBytes(of: &chunkSize) { data.append(contentsOf: $0) }
         data.append(contentsOf: "WAVEfmt ".utf8)
-        let subchunk1Size: UInt32 = 16
-        data.append(Data(from: subchunk1Size))
-        let audioFormat: UInt16 = 1 // PCM
-        data.append(Data(from: audioFormat))
-        let numChannels: UInt16 = 1
-        data.append(Data(from: numChannels))
-        let sampleRate: UInt32 = 8000
-        data.append(Data(from: sampleRate))
-        let byteRate: UInt32 = 8000 * 2
-        data.append(Data(from: byteRate))
-        let blockAlign: UInt16 = 2
-        data.append(Data(from: blockAlign))
-        let bitsPerSample: UInt16 = 16
-        data.append(Data(from: bitsPerSample))
+        var sub1: UInt32 = 16
+        withUnsafeBytes(of: &sub1) { data.append(contentsOf: $0) }
+        var fmt: UInt16 = 1
+        withUnsafeBytes(of: &fmt) { data.append(contentsOf: $0) }
+        var channels: UInt16 = 1
+        withUnsafeBytes(of: &channels) { data.append(contentsOf: $0) }
+        var sampleRate: UInt32 = 8000
+        withUnsafeBytes(of: &sampleRate) { data.append(contentsOf: $0) }
+        var byteRate: UInt32 = 16000
+        withUnsafeBytes(of: &byteRate) { data.append(contentsOf: $0) }
+        var blockAlign: UInt16 = 2
+        withUnsafeBytes(of: &blockAlign) { data.append(contentsOf: $0) }
+        var bps: UInt16 = 16
+        withUnsafeBytes(of: &bps) { data.append(contentsOf: $0) }
         data.append(contentsOf: "data".utf8)
-        let subchunk2Size: UInt32 = 8000 * 2
-        data.append(Data(from: subchunk2Size))
-        // Silencio (0x00)
-        data.append(Data(repeating: 0, count: Int(subchunk2Size)))
+        var sub2: UInt32 = 16000
+        withUnsafeBytes(of: &sub2) { data.append(contentsOf: $0) }
+        data.append(Data(repeating: 0, count: 16000))
         return data
     }
 
