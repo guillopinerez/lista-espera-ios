@@ -1,0 +1,59 @@
+name: Build ListaEspera IPA for Sideloadly
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Compile and Package iOS App
+        run: |
+          mkdir -p build/ipa_root/Payload/ListaEspera.app
+          
+          # 1. Obtener ruta del SDK oficial de iOS
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Using iOS SDK at: $SDK_PATH"
+          
+          # 2. Compilar directamente con swiftc para ARM64 iOS (SDK Oficial)
+          swiftc -O \
+            -target arm64-apple-ios16.0 \
+            -sdk "$SDK_PATH" \
+            -F "$SDK_PATH/System/Library/Frameworks" \
+            -framework SwiftUI \
+            -framework UIKit \
+            -framework AVFoundation \
+            -framework UserNotifications \
+            Models.swift \
+            BackgroundSyncEngine.swift \
+            ClientCardsView.swift \
+            ListaEsperaApp.swift \
+            -o build/ipa_root/Payload/ListaEspera.app/ListaEspera
+
+          # 3. Establecer permisos ejecutables
+          chmod 755 build/ipa_root/Payload/ListaEspera.app/ListaEspera
+          
+          # 4. Copiar Info.plist y generar PkgInfo
+          cp CustomInfoPlist.plist build/ipa_root/Payload/ListaEspera.app/Info.plist
+          printf 'APPL????' > build/ipa_root/Payload/ListaEspera.app/PkgInfo
+
+          # 5. Comprimir paquete .ipa
+          cd build/ipa_root
+          zip -qry ../ListaEspera.ipa Payload
+          cd ..
+          
+          echo "=== PAQUETE IPA CREADO EXITOSAMENTE ==="
+          ls -lh ListaEspera.ipa
+
+      - name: Upload ListaEspera.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ListaEspera-iOS-IPA
+          path: build/ListaEspera.ipa
+          retention-days: 7
