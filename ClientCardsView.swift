@@ -314,6 +314,23 @@ struct ClientCardsView: View {
     private var bottomActionBar: some View {
         HStack(spacing: 12) {
             Button(action: {
+                engine.triggerTestNotification()
+                showToast("🔔 Notificación de prueba enviada")
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "bell.badge.fill")
+                    Text("Probar Notificación")
+                }
+                .font(.system(size: 13, weight: .bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color(red: 0.12, green: 0.23, blue: 0.54))
+                .foregroundColor(.white)
+                .cornerRadius(12)
+                .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
+            }
+
+            Button(action: {
                 if let topClient = filteredContacts.first {
                     UIPasteboard.general.string = "\(topClient.phone): \(topClient.lastMessage)"
                     showToast("📋 Datos copiados al portapapeles")
@@ -321,7 +338,7 @@ struct ClientCardsView: View {
             }) {
                 HStack(spacing: 6) {
                     Image(systemName: "square.and.arrow.up")
-                    Text("Compartir Contacto")
+                    Text("Compartir")
                 }
                 .font(.system(size: 13, weight: .bold))
                 .frame(maxWidth: .infinity)

@@ -1,10 +1,11 @@
 import Foundation
 import AVFoundation
 import UserNotifications
+import AudioToolbox
 import UIKit
 
 @MainActor
-class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
+class BackgroundSyncEngine: NSObject, ObservableObject {
     static let shared = BackgroundSyncEngine()
 
     @Published var contacts: [ClientContact] = []
@@ -23,23 +24,11 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
 
     override init() {
         super.init()
-        setupNotifications()
         setupAudioKeepAlive()
         startBackgroundSync()
     }
 
-    // 1. Configuración de Notificaciones Locales
-    func setupNotifications() {
-        let center = UNUserNotificationCenter.current()
-        center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            DispatchQueue.main.async {
-                print("Permiso de notificaciones concedido: \(granted)")
-            }
-        }
-    }
-
-    // 2. Audio Keep-Alive Silencioso (Permite ejecución 24/7 con pantalla bloqueada)
+    // 1. Audio Keep-Alive Silencioso (Permite ejecución 24/7 con pantalla bloqueada)
     private func setupAudioKeepAlive() {
         do {
             try AVAudioSession.sharedInstance().setCategory(
@@ -61,7 +50,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         }
     }
 
-    // 3. Sincronización continua cada 2.5 segundos
+    // 2. Sincronización continua cada 2.5 segundos
     func startBackgroundSync() {
         syncTimer?.invalidate()
         fetchLatestData()
@@ -75,7 +64,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         RunLoop.main.add(syncTimer!, forMode: .common)
     }
 
-    // 4. Consulta de Eventos y Cola al Servidor
+    // 3. Consulta de Eventos y Cola al Servidor
     func fetchLatestData() {
         guard let url = URL(string: "\(serverUrl)?action=get_events&limit=25&token=\(apiToken)") else { return }
 
@@ -107,7 +96,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         }.resume()
     }
 
-    // 5. Procesamiento de Eventos y Despacho de Notificaciones
+    // 4. Procesamiento de Eventos y Despacho de Notificaciones
     func processIncomingEvents(_ events: [[String: Any]]) {
         guard let latest = events.first else { return }
 
@@ -121,10 +110,6 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         if !lastSeenEventId.isEmpty && latestId != lastSeenEventId && !message.isEmpty {
             // Disparar Notificación de iOS
             triggerPushNotification(phone: phone, message: message, line: line)
-            
-            // Vibración háptica
-            let generator = UINotificationFeedbackGenerator()
-            generator.notificationOccurred(.success)
         }
 
         self.lastSeenEventId = latestId
@@ -158,8 +143,8 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         self.unreadTotal = self.contacts.filter({ $0.queueStatus == "waiting" }).count
     }
 
-    // 6. Emisión de Notificación Local de iOS
-    private func triggerPushNotification(phone: String, message: String, line: String) {
+    // 5. Emisión de Notificación Local de iOS
+    func triggerPushNotification(phone: String, message: String, line: String) {
         let content = UNMutableNotificationContent()
         content.title = "📱 Nuevo SMS [\(line.uppercased())]"
         content.subtitle = phone
@@ -168,18 +153,33 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         content.badge = NSNumber(value: self.unreadTotal + 1)
         content.userInfo = ["phone": phone, "line": line]
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        // Sonido y vibración háptica
+        AudioServicesPlaySystemSound(1007)
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+
+        // Entrega inmediata (trigger: nil)
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
-            trigger: trigger
+            trigger: nil
         )
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("Error mostrando notificación: \(error)")
+            } else {
+                print("✅ Notificación despachada con éxito para \(phone)")
             }
         }
+    }
+
+    // Disparar Notificación de Prueba Manual
+    func triggerTestNotification() {
+        triggerPushNotification(
+            phone: "+1 (555) 123-4567",
+            message: "¡Prueba de Notificación Exitosa! La app está lista para recibir mensajes.",
+            line: "PRUEBA"
+        )
     }
 
     // Helper: Generador de WAV Silencioso
@@ -208,14 +208,5 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         withUnsafeBytes(of: &sub2) { data.append(contentsOf: $0) }
         data.append(Data(repeating: 0, count: 16000))
         return data
-    }
-
-    // Presentar notificación incluso cuando la app está abierta en pantalla
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        completionHandler([.banner, .sound, .badge])
     }
 }
