@@ -120,12 +120,17 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 qStatus = String(describing: matchingQueue["status"] ?? "waiting")
             }
 
+            let atendido = c["atendido_por"] as? String
+            let reqTime = c["detected_time"] as? String
+
             let contact = ClientContact(
                 phone: phone,
                 displayName: clientName,
+                atendidoPor: atendido,
                 lastMessage: lastMsg,
                 lastLine: line,
                 lastTimestamp: ts > 0 ? ts : Date().timeIntervalSince1970,
+                detectedTime: reqTime,
                 queueStatus: qStatus,
                 waitingSince: ts,
                 unreadCount: 1

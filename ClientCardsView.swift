@@ -219,6 +219,25 @@ struct ClientCardsView: View {
                     .foregroundColor(Color(red: 0.06, green: 0.09, blue: 0.16))
             }
 
+            // Técnico(s) que han atendido a este cliente
+            if let atendido = client.atendidoPor, !atendido.isEmpty, atendido != "Sin servicios previos", atendido != "Sin datos previos" {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("👩‍💼 ATENDIDO PREVIAMENTE POR:")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Color(red: 0.12, green: 0.5, blue: 0.7))
+
+                    Text(atendido)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Color(red: 0.08, green: 0.15, blue: 0.28))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(red: 0.9, green: 0.96, blue: 1.0))
+                        .cornerRadius(6)
+                        .lineLimit(2)
+                }
+            }
+
             // Mensaje SMS Recibido
             VStack(alignment: .leading, spacing: 4) {
                 Text("ÚLTIMO MENSAJE SMS:")
@@ -232,6 +251,25 @@ struct ClientCardsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(red: 0.96, green: 0.97, blue: 0.99))
                     .cornerRadius(10)
+            }
+
+            // Tiempo Solicitado en SMS (si está especificado)
+            if let reqTime = client.detectedTime, !reqTime.isEmpty, reqTime != "No especificado" {
+                HStack {
+                    Text("⏱️ TIEMPO SOLICITADO:")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
+
+                    Spacer()
+
+                    Text(reqTime)
+                        .font(.system(size: 11, weight: .black))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color(red: 0.99, green: 0.95, blue: 0.88))
+                        .foregroundColor(Color(red: 0.71, green: 0.33, blue: 0.04))
+                        .cornerRadius(6)
+                }
             }
 
             // Estado de la Cola

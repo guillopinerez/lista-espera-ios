@@ -6,9 +6,11 @@ struct ClientContact: Identifiable, Codable, Equatable {
     var id: String { phone }
     let phone: String
     var displayName: String?
+    var atendidoPor: String?
     var lastMessage: String
     var lastLine: String
     var lastTimestamp: Double
+    var detectedTime: String?
     var queueStatus: String // "waiting", "in_service", "served", "none"
     var waitingSince: Double?
     var unreadCount: Int
@@ -58,9 +60,10 @@ struct SmsEvent: Identifiable, Codable {
 
 // Configuración de Línea
 struct LineConfig: Identifiable, Codable {
-    var id: String { name }
+    let id: String
     let name: String
     let color: String
-    let active: Bool
-    let last_seen: Double?
+    let serial: String?
+    let lastSeen: Double?
+    let active: Bool?
 }
