@@ -201,11 +201,18 @@ struct ClientCardsView: View {
                     .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
             }
 
-            // Teléfono Principal del Cliente
+            // Teléfono y Nombre del Cliente
             VStack(alignment: .leading, spacing: 2) {
-                Text("NÚMERO DE CONTACTO")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
+                if let name = client.displayName, !name.isEmpty, name != "No es cliente registrado" {
+                    Text("👤 " + name.uppercased())
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundColor(Color(red: 0.12, green: 0.23, blue: 0.54))
+                        .lineLimit(1)
+                } else {
+                    Text("NÚMERO DE CONTACTO")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
+                }
 
                 Text(client.formattedPhone)
                     .font(.system(size: 24, weight: .black, design: .rounded))

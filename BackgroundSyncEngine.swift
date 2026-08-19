@@ -19,6 +19,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     private var audioPlayer: AVAudioPlayer?
     private var syncTimer: Timer?
     private var lastSeenEventId: String = ""
+    private var isInitialLoad: Bool = true
     private let serverUrl = "https://hotlatina4u.com/sms2/api.php"
     private let apiToken = "SAq1w2e3r4"
 
@@ -38,11 +39,10 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             )
             try AVAudioSession.sharedInstance().setActive(true)
 
-            // Generar buffer de audio silencioso en memoria (1 segundo WAV inaudible en loop infinito)
             let silentWavData = createSilentWavData()
             audioPlayer = try AVAudioPlayer(data: silentWavData)
-            audioPlayer?.numberOfLoops = -1 // Loop infinito
-            audioPlayer?.volume = 0.01 // Inaudible pero activo para el hardware de audio
+            audioPlayer?.numberOfLoops = -1
+            audioPlayer?.volume = 0.01
             audioPlayer?.play()
             print("🔊 Audio Keep-Alive en segundo plano activado")
         } catch {
@@ -64,9 +64,9 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         RunLoop.main.add(syncTimer!, forMode: .common)
     }
 
-    // 3. Consulta de Eventos y Cola al Servidor
+    // 3. Consulta de Eventos, Cola y Contactos al Servidor
     func fetchLatestData() {
-        guard let url = URL(string: "\(serverUrl)?action=get_events&limit=25&token=\(apiToken)") else { return }
+        guard let url = URL(string: "\(serverUrl)?action=get_events&token=\(apiToken)") else { return }
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 6.0
@@ -81,13 +81,11 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             }
 
             do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let events = json["events"] as? [[String: Any]] {
-
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     DispatchQueue.main.async {
                         BackgroundSyncEngine.shared.serverStatus = "🟢 En vivo"
                         BackgroundSyncEngine.shared.lastSyncTime = Date()
-                        BackgroundSyncEngine.shared.processIncomingEvents(events)
+                        BackgroundSyncEngine.shared.processServerPayload(json)
                     }
                 }
             } catch {
@@ -96,51 +94,68 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }.resume()
     }
 
-    // 4. Procesamiento de Eventos y Despacho de Notificaciones
-    func processIncomingEvents(_ events: [[String: Any]]) {
-        guard let latest = events.first else { return }
+    // 4. Procesamiento Integral de Contactos y Detección de Nuevos Eventos
+    func processServerPayload(_ json: [String: Any]) {
+        // A. Cargar lista de contactos históricos y actuales
+        var parsedContacts: [ClientContact] = []
+        let rawContacts = json["contacts"] as? [[String: Any]] ?? []
+        let queueItems = json["queue"] as? [[String: Any]] ?? []
 
-        let latestId = String(describing: latest["id"] ?? "")
-        let phone = String(describing: latest["phone"] ?? "")
-        let message = String(describing: latest["message"] ?? "")
-        let line = String(describing: latest["line_key"] ?? latest["device_model"] ?? "GENERAL")
-        let timestamp = latest["timestamp"] as? Double ?? Date().timeIntervalSince1970
+        for c in rawContacts {
+            let phone = String(describing: c["raw_phone"] ?? c["clean_phone"] ?? "")
+            if phone.isEmpty { continue }
 
-        // Si es un evento nuevo y no es la primera carga inicial
-        if !lastSeenEventId.isEmpty && latestId != lastSeenEventId && !message.isEmpty {
-            // Disparar Notificación de iOS
-            triggerPushNotification(phone: phone, message: message, line: line)
-        }
+            let clientName = c["client_name"] as? String
+            let lastMsg = String(describing: c["latest_message"] ?? "")
+            let line = String(describing: c["line_name"] ?? c["line_key"] ?? "GENERAL")
+            let ts = (c["latest_timestamp"] as? Double) ?? (Double(c["latest_timestamp"] as? Int ?? 0))
 
-        self.lastSeenEventId = latestId
+            // Determinar estado de cola
+            var qStatus = "waiting"
+            let cleanP = String(describing: c["clean_phone"] ?? "")
+            if let matchingQueue = queueItems.first(where: {
+                let qPhone = String(describing: $0["clean_phone"] ?? $0["phone"] ?? "")
+                return qPhone == cleanP || qPhone == phone
+            }) {
+                qStatus = String(describing: matchingQueue["status"] ?? "waiting")
+            }
 
-        // Actualizar la lista local de contactos/clientes
-        var updatedContacts = self.contacts
-        let clientIndex = updatedContacts.firstIndex(where: { $0.phone == phone })
-
-        if let idx = clientIndex {
-            updatedContacts[idx].lastMessage = message
-            updatedContacts[idx].lastLine = line
-            updatedContacts[idx].lastTimestamp = timestamp
-            // Mover al principio
-            let item = updatedContacts.remove(at: idx)
-            updatedContacts.insert(item, at: 0)
-        } else {
-            let newContact = ClientContact(
+            let contact = ClientContact(
                 phone: phone,
-                displayName: nil,
-                lastMessage: message,
+                displayName: clientName,
+                lastMessage: lastMsg,
                 lastLine: line,
-                lastTimestamp: timestamp,
-                queueStatus: "waiting",
-                waitingSince: timestamp,
+                lastTimestamp: ts > 0 ? ts : Date().timeIntervalSince1970,
+                queueStatus: qStatus,
+                waitingSince: ts,
                 unreadCount: 1
             )
-            updatedContacts.insert(newContact, at: 0)
+            parsedContacts.append(contact)
         }
 
-        self.contacts = updatedContacts
-        self.unreadTotal = self.contacts.filter({ $0.queueStatus == "waiting" }).count
+        if !parsedContacts.isEmpty {
+            self.contacts = parsedContacts
+            self.unreadTotal = parsedContacts.filter({ $0.queueStatus == "waiting" }).count
+        }
+
+        // B. Comprobar eventos recientes para disparar Notificaciones Push
+        let recentEvents = json["recent_events"] as? [[String: Any]] ?? []
+        if let topEvent = recentEvents.first {
+            let evId = String(describing: topEvent["id"] ?? "")
+            let evPhone = String(describing: topEvent["raw_phone"] ?? topEvent["clean_phone"] ?? "")
+            let evMsg = String(describing: topEvent["message"] ?? "")
+            let evLine = String(describing: topEvent["line_key"] ?? topEvent["device_model"] ?? "GENERAL")
+
+            if isInitialLoad {
+                // En el primer arranque, registrar el ID actual como base sin disparar alerta
+                lastSeenEventId = evId
+                isInitialLoad = false
+            } else if !evId.isEmpty && evId != lastSeenEventId && !evMsg.isEmpty {
+                // 🔔 ¡NUEVO MENSAJE SMS RECIBIDO! Disparar Notificación de iOS
+                lastSeenEventId = evId
+                triggerPushNotification(phone: evPhone, message: evMsg, line: evLine)
+            }
+        }
     }
 
     // 5. Emisión de Notificación Local de iOS
