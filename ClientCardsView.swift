@@ -623,9 +623,9 @@ struct ClientDetailSheetView: View {
                 .font(.system(size: 12, weight: .black))
                 .foregroundColor(Color(red: 0.06, green: 0.45, blue: 0.75))
 
-            let techs = profile?.technicians ?? []
-            if techs.isEmpty {
-                Text("Sin técnicos registrados previamente")
+            let techsDetail = profile?.techniciansDetail ?? []
+            if techsDetail.isEmpty {
+                Text("Sin servicios previos registrados")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
                     .padding(10)
@@ -633,22 +633,40 @@ struct ClientDetailSheetView: View {
                     .background(Color.white)
                     .cornerRadius(10)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(techs, id: \.self) { tech in
-                        HStack(spacing: 6) {
-                            Text("👤")
-                            Text(tech)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(Color(red: 0.08, green: 0.15, blue: 0.28))
+                VStack(spacing: 6) {
+                    ForEach(techsDetail) { item in
+                        HStack {
+                            HStack(spacing: 5) {
+                                Text("👤")
+                                Text(item.tecnico)
+                                    .font(.system(size: 13, weight: .black))
+                                    .foregroundColor(Color(red: 0.08, green: 0.15, blue: 0.28))
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: 6) {
+                                Text("📅 " + item.fecha)
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
+
+                                Text("⏱️ " + item.tiempoLabel)
+                                    .font(.system(size: 10, weight: .black))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(red: 0.99, green: 0.95, blue: 0.88))
+                                    .foregroundColor(Color(red: 0.71, green: 0.33, blue: 0.04))
+                                    .cornerRadius(4)
+                            }
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 7)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color(red: 0.9, green: 0.96, blue: 1.0))
                         .cornerRadius(8)
                     }
                 }
-                .padding(10)
+                .padding(8)
                 .background(Color.white)
                 .cornerRadius(10)
             }

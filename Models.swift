@@ -26,6 +26,17 @@ struct TodayMessage: Identifiable, Codable, Equatable {
     }
 }
 
+// Detalle individual de técnico con fecha y tiempo
+struct TechnicianDetailItem: Identifiable, Codable, Equatable {
+    var id: String { tecnico + "_" + fecha + "_" + tiempoLabel }
+    var tecnico: String
+    var fecha: String
+    var tiempo: String
+    var tiempoLabel: String
+    var tarifa: String?
+    var display: String
+}
+
 // Comentario u Observación
 struct ClientComment: Identifiable, Codable, Equatable {
     var id: String
@@ -43,6 +54,7 @@ struct ClientProfileData: Codable, Equatable {
     var clientRank: Int
     var counts: [String: Int]
     var technicians: [String]
+    var techniciansDetail: [TechnicianDetailItem]
     var atendidoPorStr: String
     var comments: [ClientComment]
     var conversation: [TodayMessage]
@@ -56,6 +68,7 @@ struct ClientContact: Identifiable, Codable, Equatable {
     var displayName: String?
     var atendidoPor: String?
     var technicians: [String]
+    var techniciansDetail: [TechnicianDetailItem]
     var lastMessage: String
     var lastLine: String
     var lastTimestamp: Double

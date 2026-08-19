@@ -142,6 +142,21 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 let pTechs = (pDict["technicians"] as? [String]) ?? []
                 let pAtendidoStr = String(describing: pDict["atendido_por_str"] ?? (atendido ?? "Sin servicios previos"))
                 
+                var pTechsDetail: [TechnicianDetailItem] = []
+                if let rawTechDetail = pDict["technicians_detail"] as? [[String: Any]] {
+                    for td in rawTechDetail {
+                        let tName = String(describing: td["tecnico"] ?? "")
+                        let tFecha = String(describing: td["fecha"] ?? "")
+                        let tTiempo = String(describing: td["tiempo"] ?? "")
+                        let tLabel = String(describing: td["tiempo_label"] ?? tTiempo)
+                        let tTarifa = td["tarifa"] as? String
+                        let tDisp = String(describing: td["display"] ?? "\(tName) • \(tFecha) • \(tLabel)")
+                        if !tName.isEmpty {
+                            pTechsDetail.append(TechnicianDetailItem(tecnico: tName, fecha: tFecha, tiempo: tTiempo, tiempoLabel: tLabel, tarifa: tTarifa, display: tDisp))
+                        }
+                    }
+                }
+
                 var pComments: [ClientComment] = []
                 if let rawComms = pDict["comments"] as? [[String: Any]] {
                     for comm in rawComms {
@@ -161,6 +176,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                     clientRank: pRank,
                     counts: pCounts,
                     technicians: pTechs,
+                    techniciansDetail: pTechsDetail,
                     atendidoPorStr: pAtendidoStr,
                     comments: pComments,
                     conversation: todayMsgs
@@ -182,6 +198,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 displayName: clientName,
                 atendidoPor: atendido,
                 technicians: profData?.technicians ?? [],
+                techniciansDetail: profData?.techniciansDetail ?? [],
                 lastMessage: lastMsg,
                 lastLine: line,
                 lastTimestamp: ts > 0 ? ts : Date().timeIntervalSince1970,
