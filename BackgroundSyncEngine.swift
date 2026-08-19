@@ -67,8 +67,9 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         fetchLatestData()
 
         syncTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
+            guard let strongSelf = self else { return }
             Task { @MainActor in
-                self?.fetchLatestData()
+                strongSelf.fetchLatestData()
             }
         }
         RunLoop.main.add(syncTimer!, forMode: .common)
@@ -82,10 +83,10 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         request.timeoutInterval = 6.0
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self, let data = data, error == nil else {
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else {
                 DispatchQueue.main.async {
-                    self?.serverStatus = "🔴 Sin conexión"
+                    BackgroundSyncEngine.shared.serverStatus = "🔴 Sin conexión"
                 }
                 return
             }
@@ -95,9 +96,9 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
                    let events = json["events"] as? [[String: Any]] {
 
                     DispatchQueue.main.async {
-                        self.serverStatus = "🟢 En vivo"
-                        self.lastSyncTime = Date()
-                        self.processIncomingEvents(events)
+                        BackgroundSyncEngine.shared.serverStatus = "🟢 En vivo"
+                        BackgroundSyncEngine.shared.lastSyncTime = Date()
+                        BackgroundSyncEngine.shared.processIncomingEvents(events)
                     }
                 }
             } catch {
@@ -107,7 +108,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
     }
 
     // 5. Procesamiento de Eventos y Despacho de Notificaciones
-    private func processIncomingEvents(_ events: [[String: Any]]) {
+    func processIncomingEvents(_ events: [[String: Any]]) {
         guard let latest = events.first else { return }
 
         let latestId = String(describing: latest["id"] ?? "")
@@ -130,7 +131,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
 
         // Actualizar la lista local de contactos/clientes
         var updatedContacts = self.contacts
-        var clientIndex = updatedContacts.firstIndex(where: { $0.phone == phone })
+        let clientIndex = updatedContacts.firstIndex(where: { $0.phone == phone })
 
         if let idx = clientIndex {
             updatedContacts[idx].lastMessage = message
@@ -218,13 +219,5 @@ class BackgroundSyncEngine: NSObject, ObservableObject, UNUserNotificationCenter
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .badge])
-    }
-}
-
-// Extensión para serializar enteros en Data
-extension Data {
-    init<T>(from value: T) {
-        var val = value
-        self = Swift.withUnsafeBytes(of: &val) { Data($0) }
     }
 }
