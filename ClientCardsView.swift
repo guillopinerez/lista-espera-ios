@@ -3,7 +3,7 @@ import SwiftUI
 struct ClientCardsView: View {
     @ObservedObject var engine = BackgroundSyncEngine.shared
     @State private var currentCardIndex: Int = 0
-    @State private var showingQuickQueueAlert: Bool = false
+    @State private var selectedClientForDetail: ClientContact? = nil
     @State private var toastMessage: String?
 
     var filteredContacts: [ClientContact] {
@@ -52,6 +52,9 @@ struct ClientCardsView: View {
                 .animation(.easeInOut, value: toastMessage)
             }
         }
+        .sheet(item: $selectedClientForDetail) { client in
+            ClientDetailSheetView(client: client, engine: engine)
+        }
     }
 
     // --- SUBVIEWS ---
@@ -73,7 +76,7 @@ struct ClientCardsView: View {
                         .cornerRadius(6)
                 }
 
-                Text("Tarjetas de Clientes en Tiempo Real")
+                Text("Monitoreo y Notificaciones en Tiempo Real")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
             }
@@ -103,7 +106,6 @@ struct ClientCardsView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(engine.activeLines, id: \.self) { line in
-                    let isSelected = engine.selectedLine == line
                     Button(action: {
                         withAnimation {
                             engine.selectedLine = line
@@ -114,83 +116,67 @@ struct ClientCardsView: View {
                             .font(.system(size: 12, weight: .bold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(isSelected ? Color(red: 0.12, green: 0.23, blue: 0.54) : Color.white)
-                            .foregroundColor(isSelected ? .white : Color(red: 0.28, green: 0.33, blue: 0.41))
-                            .cornerRadius(16)
-                            .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+                            .background(engine.selectedLine == line ? Color(red: 0.12, green: 0.23, blue: 0.54) : Color.white)
+                            .foregroundColor(engine.selectedLine == line ? .white : Color(red: 0.3, green: 0.35, blue: 0.45))
+                            .cornerRadius(20)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(engine.selectedLine == line ? Color.clear : Color(red: 0.88, green: 0.9, blue: 0.94), lineWidth: 1)
+                            )
                     }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
-        .background(Color(red: 0.98, green: 0.98, blue: 0.99))
+        .background(Color(red: 0.98, green: 0.99, blue: 1.0))
     }
 
     private var cardsCarouselView: some View {
         VStack(spacing: 12) {
-            // Contador de posición de tarjeta
+            // Indicador de Posición
             HStack {
-                Text("Cliente \(currentCardIndex + 1) de \(filteredContacts.count)")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
+                Text("CLIENTE \(min(currentCardIndex + 1, filteredContacts.count)) DE \(filteredContacts.count)")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
 
                 Spacer()
 
-                HStack(spacing: 12) {
-                    Button(action: {
-                        if currentCardIndex > 0 {
-                            withAnimation { currentCardIndex -= 1 }
-                        }
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(currentCardIndex > 0 ? Color(red: 0.12, green: 0.23, blue: 0.54) : Color.gray.opacity(0.3))
-                    }
-                    .disabled(currentCardIndex == 0)
-
-                    Button(action: {
-                        if currentCardIndex < filteredContacts.count - 1 {
-                            withAnimation { currentCardIndex += 1 }
-                        }
-                    }) {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(currentCardIndex < filteredContacts.count - 1 ? Color(red: 0.12, green: 0.23, blue: 0.54) : Color.gray.opacity(0.3))
-                    }
-                    .disabled(currentCardIndex >= filteredContacts.count - 1)
-                }
+                Text("👉 Desliza para navegar")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(red: 0.6, green: 0.65, blue: 0.75))
             }
             .padding(.horizontal, 20)
-            .padding(.top, 8)
+            .padding(.top, 6)
 
-            // Paginador de Tarjetas
+            // Tarjeta Principal Interactiva con Paginación
             TabView(selection: $currentCardIndex) {
                 ForEach(Array(filteredContacts.enumerated()), id: \.element.id) { index, client in
-                    clientCard(for: client)
+                    cardItemView(client: client)
                         .tag(index)
                         .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
                 }
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         }
     }
 
-    private func clientCard(for client: ClientContact) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Encabezado de la Tarjeta
+    private func cardItemView(client: ClientContact) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Fila 1: Badge de Línea + Hora Relativa + Botón Ver Detalle
             HStack {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Circle()
                         .fill(client.lineColor)
-                        .frame(width: 10, height: 10)
+                        .frame(width: 8, height: 8)
 
-                    Text(client.lastLine.uppercased())
-                        .font(.system(size: 13, weight: .black))
+                    Text("📱 " + client.lastLine.uppercased())
+                        .font(.system(size: 12, weight: .black))
                         .foregroundColor(client.lineColor)
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                .padding(.vertical, 5)
                 .background(client.lineColor.opacity(0.12))
                 .cornerRadius(8)
 
@@ -201,17 +187,17 @@ struct ClientCardsView: View {
                     .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
             }
 
-            // Teléfono y Nombre del Cliente
+            // Fila 2: Nombre de Cliente / "NO ES CLIENTE" y Teléfono
             VStack(alignment: .leading, spacing: 2) {
-                if let name = client.displayName, !name.isEmpty, name != "No es cliente registrado" {
-                    Text("👤 " + name.uppercased())
-                        .font(.system(size: 14, weight: .black))
+                if client.isRegistered {
+                    Text(client.notificationTitle)
+                        .font(.system(size: 15, weight: .black))
                         .foregroundColor(Color(red: 0.12, green: 0.23, blue: 0.54))
                         .lineLimit(1)
                 } else {
-                    Text("NÚMERO DE CONTACTO")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
+                    Text("⚠️ NO ES CLIENTE")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundColor(Color(red: 0.85, green: 0.2, blue: 0.2))
                 }
 
                 Text(client.formattedPhone)
@@ -219,71 +205,75 @@ struct ClientCardsView: View {
                     .foregroundColor(Color(red: 0.06, green: 0.09, blue: 0.16))
             }
 
-            // Técnico(s) que han atendido a este cliente
-            if let atendido = client.atendidoPor, !atendido.isEmpty, atendido != "Sin servicios previos", atendido != "Sin datos previos" {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("👩‍💼 ATENDIDO PREVIAMENTE POR:")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(Color(red: 0.12, green: 0.5, blue: 0.7))
-
-                    Text(atendido)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(Color(red: 0.08, green: 0.15, blue: 0.28))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(red: 0.9, green: 0.96, blue: 1.0))
-                        .cornerRadius(6)
-                        .lineLimit(2)
-                }
-            }
-
-            // Mensaje SMS Recibido
+            // Fila 3: Conversación Unificada de Hoy (Todos los SMS recibidos)
             VStack(alignment: .leading, spacing: 4) {
-                Text("ÚLTIMO MENSAJE SMS:")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
-
-                Text("\"\(client.lastMessage)\"")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(red: 0.96, green: 0.97, blue: 0.99))
-                    .cornerRadius(10)
-            }
-
-            // Tiempo Solicitado en SMS (si está especificado)
-            if let reqTime = client.detectedTime, !reqTime.isEmpty, reqTime != "No especificado" {
                 HStack {
-                    Text("⏱️ TIEMPO SOLICITADO:")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
+                    Text("💬 CONVERSACIÓN DE HOY (\(client.todayMessages.count > 0 ? client.todayMessages.count : 1) SMS):")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundColor(Color(red: 0.45, green: 0.5, blue: 0.6))
 
                     Spacer()
-
-                    Text(reqTime)
-                        .font(.system(size: 11, weight: .black))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color(red: 0.99, green: 0.95, blue: 0.88))
-                        .foregroundColor(Color(red: 0.71, green: 0.33, blue: 0.04))
-                        .cornerRadius(6)
                 }
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if client.todayMessages.isEmpty {
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•")
+                                    .foregroundColor(client.lineColor)
+                                    .fontWeight(.black)
+                                Text("\"\(client.lastMessage)\"")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                            }
+                            .padding(6)
+                        } else {
+                            ForEach(client.todayMessages) { msg in
+                                HStack(alignment: .top, spacing: 6) {
+                                    Text(msg.timeFormatted)
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                        .foregroundColor(client.lineColor)
+                                        .padding(.top, 1)
+
+                                    Text(msg.message)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                                }
+                                .padding(4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.8))
+                                .cornerRadius(6)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 110)
+                .padding(8)
+                .background(Color(red: 0.96, green: 0.97, blue: 0.99))
+                .cornerRadius(10)
             }
 
-            // Estado de la Cola
-            HStack {
-                Text("ESTADO DE COLA:")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(Color(red: 0.55, green: 0.6, blue: 0.7))
+            // Fila 4: Tiempo Solicitado y Estado de Cola
+            HStack(spacing: 8) {
+                if let reqTime = client.detectedTime, !reqTime.isEmpty, reqTime != "No especificado" {
+                    HStack(spacing: 4) {
+                        Text("⏱️")
+                        Text(reqTime)
+                            .font(.system(size: 11, weight: .black))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(red: 0.99, green: 0.95, blue: 0.88))
+                    .foregroundColor(Color(red: 0.71, green: 0.33, blue: 0.04))
+                    .cornerRadius(6)
+                }
 
                 Spacer()
 
                 Text(client.queueStatus == "in_service" ? "🟢 EN ATENCIÓN" : "⏳ EN ESPERA")
                     .font(.system(size: 11, weight: .black))
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 4)
                     .background(client.queueStatus == "in_service" ? Color(red: 0.92, green: 0.99, blue: 0.95) : Color(red: 0.95, green: 0.96, blue: 0.98))
                     .foregroundColor(client.queueStatus == "in_service" ? Color(red: 0.02, green: 0.47, blue: 0.34) : Color(red: 0.28, green: 0.33, blue: 0.41))
                     .cornerRadius(6)
@@ -291,57 +281,69 @@ struct ClientCardsView: View {
 
             Spacer()
 
-            // Botones de Acción de la Tarjeta
-            HStack(spacing: 10) {
-                // Botón Llamar
+            // Fila 5: Botones de Acción
+            HStack(spacing: 8) {
+                // Botón Ver Detalle Completo
                 Button(action: {
-                    if let url = URL(string: "tel://\(client.phone)") {
-                        UIApplication.shared.open(url)
-                    }
+                    selectedClientForDetail = client
                 }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "phone.fill")
-                        Text("Llamar")
+                    HStack(spacing: 5) {
+                        Image(systemName: "person.text.rectangle.fill")
+                        Text("Ver Detalle")
                     }
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(Color(red: 0.02, green: 0.47, blue: 0.34))
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
-
-                // Botón Copiar Número
-                Button(action: {
-                    UIPasteboard.general.string = client.phone
-                    showToast("📋 Número copiado: \(client.phone)")
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.on.doc.fill")
-                        Text("Copiar")
-                    }
-                    .font(.system(size: 13, weight: .bold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
+                    .padding(.vertical, 10)
                     .background(Color(red: 0.12, green: 0.23, blue: 0.54))
                     .foregroundColor(.white)
                     .cornerRadius(10)
                 }
+
+                // Botón Llamar
+                Button(action: {
+                    let clean = client.phone.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+                    if let url = URL(string: "tel://\(clean)") {
+                        UIApplication.shared.open(url)
+                    }
+                }) {
+                    Image(systemName: "phone.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .padding(10)
+                        .background(Color(red: 0.92, green: 0.99, blue: 0.95))
+                        .foregroundColor(Color(red: 0.02, green: 0.47, blue: 0.34))
+                        .cornerRadius(10)
+                }
+
+                // Botón Copiar
+                Button(action: {
+                    UIPasteboard.general.string = "\(client.displayName ?? "Cliente"): \(client.phone) - \(client.lastMessage)"
+                    showToast("📋 Copiado al portapapeles")
+                }) {
+                    Image(systemName: "doc.on.doc.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .padding(10)
+                        .background(Color(red: 0.95, green: 0.96, blue: 0.98))
+                        .foregroundColor(Color(red: 0.3, green: 0.35, blue: 0.45))
+                        .cornerRadius(10)
+                }
             }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: 380)
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white)
-        .cornerRadius(16)
+        .cornerRadius(18)
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 3)
+        .onTapGesture {
+            selectedClientForDetail = client
+        }
     }
 
     private var emptyStateView: some View {
         VStack(spacing: 12) {
             Spacer()
-            Image(systemName: "person.crop.circle.badge.clock")
-                .font(.system(size: 50))
-                .foregroundColor(Color.gray.opacity(0.4))
+            Image(systemName: "tray.fill")
+                .font(.system(size: 44))
+                .foregroundColor(Color(red: 0.75, green: 0.78, blue: 0.85))
 
             Text("Esperando clientes...")
                 .font(.system(size: 16, weight: .bold))
@@ -377,13 +379,12 @@ struct ClientCardsView: View {
 
             Button(action: {
                 if let topClient = filteredContacts.first {
-                    UIPasteboard.general.string = "\(topClient.phone): \(topClient.lastMessage)"
-                    showToast("📋 Datos copiados al portapapeles")
+                    selectedClientForDetail = topClient
                 }
             }) {
                 HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.up")
-                    Text("Compartir")
+                    Image(systemName: "person.crop.circle.fill")
+                    Text("Detalle Cliente")
                 }
                 .font(.system(size: 13, weight: .bold))
                 .frame(maxWidth: .infinity)
@@ -404,6 +405,316 @@ struct ClientCardsView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             if toastMessage == msg {
                 toastMessage = nil
+            }
+        }
+    }
+}
+
+// --- VISTA DETALLADA DEL CLIENTE (IGUAL AL DASHBOARD WEB) ---
+struct ClientDetailSheetView: View {
+    let client: ClientContact
+    @ObservedObject var engine: BackgroundSyncEngine
+    @Environment(\.presentationMode) var presentationMode
+    @State private var newCommentText: String = ""
+    @State private var isSavingComment: Bool = false
+
+    var profile: ClientProfileData? { client.profile }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // 1. Cabecera Principal del Cliente
+                    clientHeaderSection
+
+                    // 2. Toda la conversación de hoy
+                    conversationSection
+
+                    // 3. Métricas Contextuales (4 Cajas idénticas al Dashboard)
+                    metricsSection
+
+                    // 4. Técnicos que han atendido previamente
+                    techniciansSection
+
+                    // 5. Notas y Comentarios
+                    commentsSection
+                }
+                .padding(16)
+            }
+            .background(Color(red: 0.95, green: 0.96, blue: 0.98).ignoresSafeArea())
+            .navigationBarTitle("Detalle de Cliente", displayMode: .inline)
+            .navigationBarItems(trailing: Button("Cerrar") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+
+    private var clientHeaderSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if client.isRegistered {
+                    Text(client.notificationTitle)
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundColor(Color(red: 0.12, green: 0.23, blue: 0.54))
+                } else {
+                    Text("⚠️ NO ES CLIENTE REGISTRADO")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundColor(Color(red: 0.85, green: 0.2, blue: 0.2))
+                }
+
+                Spacer()
+
+                Text("📱 \(client.lastLine.uppercased())")
+                    .font(.system(size: 11, weight: .black))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(client.lineColor.opacity(0.12))
+                    .foregroundColor(client.lineColor)
+                    .cornerRadius(6)
+            }
+
+            Text(client.formattedPhone)
+                .font(.system(size: 26, weight: .black, design: .rounded))
+                .foregroundColor(Color(red: 0.06, green: 0.09, blue: 0.16))
+
+            HStack(spacing: 10) {
+                Button(action: {
+                    let clean = client.phone.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+                    if let url = URL(string: "tel://\(clean)") {
+                        UIApplication.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "phone.fill")
+                        Text("Llamar")
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color(red: 0.92, green: 0.99, blue: 0.95))
+                    .foregroundColor(Color(red: 0.02, green: 0.47, blue: 0.34))
+                    .cornerRadius(8)
+                }
+
+                Button(action: {
+                    UIPasteboard.general.string = client.phone
+                }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "doc.on.doc")
+                        Text("Copiar Número")
+                    }
+                    .font(.system(size: 13, weight: .bold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.white)
+                    .foregroundColor(Color(red: 0.2, green: 0.25, blue: 0.35))
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .cornerRadius(14)
+    }
+
+    private var conversationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("💬 TODA LA CONVERSACIÓN DE HOY (\(client.todayMessages.count > 0 ? client.todayMessages.count : 1) SMS)")
+                .font(.system(size: 12, weight: .black))
+                .foregroundColor(Color(red: 0.06, green: 0.45, blue: 0.75))
+
+            VStack(spacing: 8) {
+                if client.todayMessages.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("📱 \(client.lastLine.uppercased())")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(client.lineColor)
+                            Spacer()
+                            Text(client.timeAgo)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                        }
+                        Text(client.lastMessage)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white)
+                    .cornerRadius(10)
+                } else {
+                    ForEach(client.todayMessages) { msg in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("📱 \(msg.lineName.uppercased())")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(client.lineColor)
+                                Spacer()
+                                Text(msg.timeFormatted + " (NYC)")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                            }
+                            Text(msg.message)
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white)
+                        .cornerRadius(10)
+                    }
+                }
+            }
+        }
+    }
+
+    private var metricsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("📊 MÉTRICAS DEL CLIENTE")
+                .font(.system(size: 12, weight: .black))
+                .foregroundColor(Color(red: 0.3, green: 0.35, blue: 0.45))
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                metricBox(title: "TOTAL HISTÓRICO", value: "$\(Int(profile?.totalRevenue ?? 0))", color: Color(red: 0.85, green: 0.65, blue: 0.13))
+                metricBox(title: "ÚLTIMOS 30 DÍAS", value: "$\(Int(profile?.revenue30Days ?? 0))", color: Color(red: 0.05, green: 0.65, blue: 0.45))
+                metricBox(title: "RANKING", value: profile?.found == true ? "#\(profile?.clientRank ?? 1)" : "N/A", color: Color(red: 0.05, green: 0.55, blue: 0.85))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TOTAL SERVICIOS")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                    Text("\(profile?.serviceCount ?? 0)")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundColor(Color(red: 0.55, green: 0.25, blue: 0.85))
+                    
+                    let c = profile?.counts ?? [:]
+                    Text("SS (15m): \(c["SS"] ?? 0) | HH (30m): \(c["HH"] ?? 0)\nH (1h): \(c["H"] ?? 0) | 2H (2h): \(c["2H"] ?? 0)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white)
+                .cornerRadius(10)
+            }
+        }
+    }
+
+    private func metricBox(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+            Text(value)
+                .font(.system(size: 18, weight: .black))
+                .foregroundColor(color)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .cornerRadius(10)
+    }
+
+    private var techniciansSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("👩‍💼 ATENDIDO PREVIAMENTE POR:")
+                .font(.system(size: 12, weight: .black))
+                .foregroundColor(Color(red: 0.06, green: 0.45, blue: 0.75))
+
+            let techs = profile?.technicians ?? []
+            if techs.isEmpty {
+                Text("Sin técnicos registrados previamente")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white)
+                    .cornerRadius(10)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(techs, id: \.self) { tech in
+                        HStack(spacing: 6) {
+                            Text("👤")
+                            Text(tech)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(Color(red: 0.08, green: 0.15, blue: 0.28))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(red: 0.9, green: 0.96, blue: 1.0))
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(10)
+                .background(Color.white)
+                .cornerRadius(10)
+            }
+        }
+    }
+
+    private var commentsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("📝 NOTAS Y COMENTARIOS")
+                .font(.system(size: 12, weight: .black))
+                .foregroundColor(Color(red: 0.3, green: 0.35, blue: 0.45))
+
+            // Campo para agregar nota
+            HStack(spacing: 8) {
+                TextField("Escribir nota para este cliente...", text: $newCommentText)
+                    .padding(10)
+                    .background(Color.white)
+                    .cornerRadius(8)
+
+                Button(action: {
+                    guard !newCommentText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    isSavingComment = true
+                    engine.addComment(phone: client.cleanPhone, comment: newCommentText) { success in
+                        isSavingComment = false
+                        if success {
+                            newCommentText = ""
+                        }
+                    }
+                }) {
+                    Text(isSavingComment ? "..." : "Guardar")
+                        .font(.system(size: 13, weight: .bold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color(red: 0.12, green: 0.23, blue: 0.54))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+            }
+
+            // Lista de comentarios anteriores
+            let comments = profile?.comments ?? []
+            if comments.isEmpty {
+                Text("Sin notas ni comentarios registrados.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white)
+                    .cornerRadius(10)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(comments) { c in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(c.comentario)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                            Text("🕒 \(c.fecha_comentario)")
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white)
+                        .cornerRadius(8)
+                    }
+                }
             }
         }
     }

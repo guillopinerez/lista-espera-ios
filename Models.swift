@@ -1,12 +1,61 @@
 import Foundation
 import SwiftUI
 
+// Mensaje individual dentro de la conversación del día
+struct TodayMessage: Identifiable, Codable, Equatable {
+    var id: String
+    var message: String
+    var date: String
+    var timestamp: Double
+    var lineKey: String
+    var lineName: String
+    var isToday: Bool
+
+    var timeFormatted: String {
+        if timestamp > 0 {
+            let d = Date(timeIntervalSince1970: timestamp)
+            let f = DateFormatter()
+            f.dateFormat = "HH:mm:ss"
+            f.timeZone = TimeZone(identifier: "America/New_York")
+            return f.string(from: d)
+        }
+        if date.contains(" ") {
+            return String(date.split(separator: " ").last ?? "")
+        }
+        return date
+    }
+}
+
+// Comentario u Observación
+struct ClientComment: Identifiable, Codable, Equatable {
+    var id: String
+    var comentario: String
+    var fecha_comentario: String
+}
+
+// Perfil Histórico Completo del Cliente
+struct ClientProfileData: Codable, Equatable {
+    var found: Bool
+    var primaryName: String
+    var serviceCount: Int
+    var totalRevenue: Double
+    var revenue30Days: Double
+    var clientRank: Int
+    var counts: [String: Int]
+    var technicians: [String]
+    var atendidoPorStr: String
+    var comments: [ClientComment]
+    var conversation: [TodayMessage]
+}
+
 // Modelo de Cliente / Contacto para la Tarjeta
 struct ClientContact: Identifiable, Codable, Equatable {
-    var id: String { phone }
+    var id: String { phone + "_" + lastLine }
+    let cleanPhone: String
     let phone: String
     var displayName: String?
     var atendidoPor: String?
+    var technicians: [String]
     var lastMessage: String
     var lastLine: String
     var lastTimestamp: Double
@@ -14,6 +63,22 @@ struct ClientContact: Identifiable, Codable, Equatable {
     var queueStatus: String // "waiting", "in_service", "served", "none"
     var waitingSince: Double?
     var unreadCount: Int
+    var todayMessages: [TodayMessage]
+    var profile: ClientProfileData?
+
+    var isRegistered: Bool {
+        if let name = displayName, !name.isEmpty, name != "No es cliente registrado", name != "NO ES CLIENTE" {
+            return true
+        }
+        return false
+    }
+
+    var notificationTitle: String {
+        if isRegistered, let name = displayName {
+            return "👤 \(name.uppercased())"
+        }
+        return "⚠️ NO ES CLIENTE"
+    }
 
     var formattedPhone: String {
         let cleaned = phone.replacingOccurrences(of: "[^0-9+]", with: "", options: .regularExpression)
@@ -21,6 +86,12 @@ struct ClientContact: Identifiable, Codable, Equatable {
             let area = cleaned.dropFirst(2).prefix(3)
             let mid = cleaned.dropFirst(5).prefix(3)
             let end = cleaned.dropFirst(8).prefix(4)
+            return "+1 (\(area)) \(mid)-\(end)"
+        }
+        if cleaned.count == 10 {
+            let area = cleaned.prefix(3)
+            let mid = cleaned.dropFirst(3).prefix(3)
+            let end = cleaned.dropFirst(6).prefix(4)
             return "+1 (\(area)) \(mid)-\(end)"
         }
         return phone
@@ -45,25 +116,4 @@ struct ClientContact: Identifiable, Codable, Equatable {
         if u.contains("CARLOS") { return Color(red: 0.427, green: 0.157, blue: 0.851) }   // #6d28d9
         return Color.blue
     }
-}
-
-// Evento SMS entrante
-struct SmsEvent: Identifiable, Codable {
-    let id: String
-    let phone: String
-    let message: String
-    let line_key: String?
-    let device: String?
-    let date: String?
-    let timestamp: Double?
-}
-
-// Configuración de Línea
-struct LineConfig: Identifiable, Codable {
-    let id: String
-    let name: String
-    let color: String
-    let serial: String?
-    let lastSeen: Double?
-    let active: Bool?
 }

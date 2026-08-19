@@ -94,7 +94,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }.resume()
     }
 
-    // 4. Procesamiento Integral de Contactos y Detección de Nuevos Eventos
+    // 4. Procesamiento Integral de Contactos con Conversación Unificada y Detección de Nuevos Eventos
     func processServerPayload(_ json: [String: Any]) {
         // A. Cargar lista de contactos históricos y actuales
         var parsedContacts: [ClientContact] = []
@@ -102,17 +102,73 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         let queueItems = json["queue"] as? [[String: Any]] ?? []
 
         for c in rawContacts {
-            let phone = String(describing: c["raw_phone"] ?? c["clean_phone"] ?? "")
-            if phone.isEmpty { continue }
+            let rawP = String(describing: c["raw_phone"] ?? c["clean_phone"] ?? "")
+            let cleanP = String(describing: c["clean_phone"] ?? "")
+            if cleanP.isEmpty && rawP.isEmpty { continue }
 
+            let phone = rawP.isEmpty ? cleanP : rawP
             let clientName = c["client_name"] as? String
             let lastMsg = String(describing: c["latest_message"] ?? "")
             let line = String(describing: c["line_name"] ?? c["line_key"] ?? "GENERAL")
             let ts = (c["latest_timestamp"] as? Double) ?? (Double(c["latest_timestamp"] as? Int ?? 0))
+            let atendido = c["atendido_por"] as? String
+            let reqTime = c["detected_time"] as? String
+
+            // Mensajes del día unificados (Conversación)
+            var todayMsgs: [TodayMessage] = []
+            if let rawToday = c["today_messages"] as? [[String: Any]] {
+                for m in rawToday {
+                    let mId = String(describing: m["id"] ?? UUID().uuidString)
+                    let mMsg = String(describing: m["message"] ?? "")
+                    let mDate = String(describing: m["date"] ?? "")
+                    let mTs = (m["timestamp"] as? Double) ?? (Double(m["timestamp"] as? Int ?? 0))
+                    let mLk = String(describing: m["line_key"] ?? line)
+                    let mLn = String(describing: m["line_name"] ?? line)
+                    let mIsToday = (m["is_today"] as? Bool) ?? true
+                    todayMsgs.append(TodayMessage(id: mId, message: mMsg, date: mDate, timestamp: mTs, lineKey: mLk, lineName: mLn, isToday: mIsToday))
+                }
+            }
+
+            // Perfil enriquecido completo
+            var profData: ClientProfileData? = nil
+            if let pDict = c["profile"] as? [String: Any] {
+                let pFound = (pDict["found"] as? Bool) ?? false
+                let pName = String(describing: pDict["primary_name"] ?? (clientName ?? "No es cliente registrado"))
+                let pSvcCount = (pDict["service_count"] as? Int) ?? 0
+                let pTotRev = (pDict["total_revenue"] as? Double) ?? (Double(pDict["total_revenue"] as? Int ?? 0))
+                let pRev30 = (pDict["revenue_30_days"] as? Double) ?? (Double(pDict["revenue_30_days"] as? Int ?? 0))
+                let pRank = (pDict["client_rank"] as? Int) ?? 1
+                let pCounts = (pDict["counts"] as? [String: Int]) ?? [:]
+                let pTechs = (pDict["technicians"] as? [String]) ?? []
+                let pAtendidoStr = String(describing: pDict["atendido_por_str"] ?? (atendido ?? "Sin servicios previos"))
+                
+                var pComments: [ClientComment] = []
+                if let rawComms = pDict["comments"] as? [[String: Any]] {
+                    for comm in rawComms {
+                        let cId = String(describing: comm["id"] ?? UUID().uuidString)
+                        let cTxt = String(describing: comm["comentario"] ?? "")
+                        let cDate = String(describing: comm["fecha_comentario"] ?? "")
+                        pComments.append(ClientComment(id: cId, comentario: cTxt, fecha_comentario: cDate))
+                    }
+                }
+
+                profData = ClientProfileData(
+                    found: pFound,
+                    primaryName: pName,
+                    serviceCount: pSvcCount,
+                    totalRevenue: pTotRev,
+                    revenue30Days: pRev30,
+                    clientRank: pRank,
+                    counts: pCounts,
+                    technicians: pTechs,
+                    atendidoPorStr: pAtendidoStr,
+                    comments: pComments,
+                    conversation: todayMsgs
+                )
+            }
 
             // Determinar estado de cola
             var qStatus = "waiting"
-            let cleanP = String(describing: c["clean_phone"] ?? "")
             if let matchingQueue = queueItems.first(where: {
                 let qPhone = String(describing: $0["clean_phone"] ?? $0["phone"] ?? "")
                 return qPhone == cleanP || qPhone == phone
@@ -120,20 +176,21 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 qStatus = String(describing: matchingQueue["status"] ?? "waiting")
             }
 
-            let atendido = c["atendido_por"] as? String
-            let reqTime = c["detected_time"] as? String
-
             let contact = ClientContact(
+                cleanPhone: cleanP,
                 phone: phone,
                 displayName: clientName,
                 atendidoPor: atendido,
+                technicians: profData?.technicians ?? [],
                 lastMessage: lastMsg,
                 lastLine: line,
                 lastTimestamp: ts > 0 ? ts : Date().timeIntervalSince1970,
                 detectedTime: reqTime,
                 queueStatus: qStatus,
                 waitingSince: ts,
-                unreadCount: 1
+                unreadCount: 1,
+                todayMessages: todayMsgs,
+                profile: profData
             )
             parsedContacts.append(contact)
         }
@@ -150,30 +207,47 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             let evPhone = String(describing: topEvent["raw_phone"] ?? topEvent["clean_phone"] ?? "")
             let evMsg = String(describing: topEvent["message"] ?? "")
             let evLine = String(describing: topEvent["line_key"] ?? topEvent["device_model"] ?? "GENERAL")
+            
+            // Buscar perfil del cliente para el nombre de la notificación
+            let evProf = topEvent["profile"] as? [String: Any]
+            let evName = evProf?["primary_name"] as? String
+            let evFound = (evProf?["found"] as? Bool) ?? false
 
             if isInitialLoad {
-                // En el primer arranque, registrar el ID actual como base sin disparar alerta
                 lastSeenEventId = evId
                 isInitialLoad = false
             } else if !evId.isEmpty && evId != lastSeenEventId && !evMsg.isEmpty {
                 // 🔔 ¡NUEVO MENSAJE SMS RECIBIDO! Disparar Notificación de iOS
                 lastSeenEventId = evId
-                triggerPushNotification(phone: evPhone, message: evMsg, line: evLine)
+                triggerPushNotification(phone: evPhone, message: evMsg, line: evLine, clientName: evName, isClient: evFound)
             }
         }
     }
 
-    // 5. Emisión de Notificación Local de iOS
-    func triggerPushNotification(phone: String, message: String, line: String) {
+    // 5. Emisión de Notificación de iOS con Formato Profesional y Datos Claves
+    func triggerPushNotification(phone: String, message: String, line: String, clientName: String? = nil, isClient: Bool = false) {
         let content = UNMutableNotificationContent()
-        content.title = "📱 Nuevo SMS [\(line.uppercased())]"
-        content.subtitle = phone
-        content.body = message
+        
+        // 1. TÍTULO CLAVE: Nombre del cliente o "⚠️ NO ES CLIENTE"
+        if let name = clientName, !name.isEmpty, name != "No es cliente registrado", name != "NO ES CLIENTE" {
+            content.title = "👤 \(name.uppercased())"
+        } else if isClient {
+            content.title = "👤 CLIENTE REGISTRADO"
+        } else {
+            content.title = "⚠️ NO ES CLIENTE"
+        }
+
+        // 2. SUBTÍTULO: Línea receptora y Teléfono
+        content.subtitle = "📱 Línea: \(line.uppercased()) • \(phone)"
+
+        // 3. CUERPO: Mensaje SMS recibido
+        content.body = "\"\(message)\""
+        
         content.sound = UNNotificationSound.default
         content.badge = NSNumber(value: self.unreadTotal + 1)
         content.userInfo = ["phone": phone, "line": line]
 
-        // Sonido y vibración háptica
+        // Sonido del sistema y vibración táptica
         AudioServicesPlaySystemSound(1007)
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
 
@@ -188,7 +262,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             if let error = error {
                 print("Error mostrando notificación: \(error)")
             } else {
-                print("✅ Notificación despachada con éxito para \(phone)")
+                print("✅ Notificación despachada: [\(content.title)] Línea: \(line)")
             }
         }
     }
@@ -196,10 +270,37 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     // Disparar Notificación de Prueba Manual
     func triggerTestNotification() {
         triggerPushNotification(
-            phone: "+1 (555) 123-4567",
-            message: "¡Prueba de Notificación Exitosa! La app está lista para recibir mensajes.",
-            line: "PRUEBA"
+            phone: "+1 (732) 207-7581",
+            message: "Room No. ?? Are you there?",
+            line: "NATALIA",
+            clientName: "CHAN / CARLOS",
+            isClient: true
         )
+    }
+
+    // Guardar nuevo comentario o nota para un cliente
+    func addComment(phone: String, comment: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(serverUrl)?action=add_comment&token=\(apiToken)") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: String] = ["telefono": phone, "comentario": comment]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            let success = (error == nil)
+            DispatchQueue.main.async {
+                if success {
+                    self?.fetchLatestData()
+                }
+                completion(success)
+            }
+        }.resume()
     }
 
     // Helper: Generador de WAV Silencioso
