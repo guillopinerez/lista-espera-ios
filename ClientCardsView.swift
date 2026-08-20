@@ -910,10 +910,6 @@ struct ClientDetailSheetView: View {
                         .cornerRadius(8)
                     }
                 }
-            }ground(Color.white)
-                        .cornerRadius(8)
-                    }
-                }
             }
         }
     }
