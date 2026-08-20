@@ -443,6 +443,8 @@ struct ClientDetailSheetView: View {
     @State private var isSavingComment: Bool = false
     @State private var showingEditName: Bool = false
     @State private var newClientName: String = ""
+    @State private var isSavingName: Bool = false
+    @State private var detailedProfile: ClientProfileData? = nil
     @State private var commentToEdit: ClientComment? = nil
     @State private var showingEditAlert: Bool = false
     @State private var editText: String = ""
@@ -913,4 +915,6 @@ struct ClientDetailSheetView: View {
             }
         }
     }
+}
+}
 }
