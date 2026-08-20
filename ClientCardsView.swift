@@ -281,6 +281,27 @@ struct ClientCardsView: View {
 
             // Fila 5: Botones de Acción (Elevados y Visibles)
             HStack(spacing: 8) {
+                // Botón VER NOTAS destacado si el cliente tiene comentarios
+                if client.hasNotes {
+                    Button(action: {
+                        selectedClientForDetail = client
+                    }) {
+                        HStack(spacing: 4) {
+                            Text("📝 NOTAS (\(client.notesCount))")
+                                .font(.system(size: 11, weight: .black))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 9)
+                        .background(Color(red: 0.98, green: 0.85, blue: 0.25))
+                        .foregroundColor(Color(red: 0.45, green: 0.18, blue: 0.0))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color(red: 0.9, green: 0.7, blue: 0.0), lineWidth: 1.5)
+                        )
+                    }
+                }
+
                 // Botón Ver Detalle Completo
                 Button(action: {
                     selectedClientForDetail = client
@@ -423,8 +444,9 @@ struct ClientDetailSheetView: View {
     @State private var showingEditName: Bool = false
     @State private var newClientName: String = ""
     @State private var isSavingName: Bool = false
+    @State private var detailedProfile: ClientProfileData? = nil
 
-    var profile: ClientProfileData? { client.profile }
+    var activeProfile: ClientProfileData? { detailedProfile ?? client.profile }
 
     var body: some View {
         NavigationView {
@@ -446,6 +468,13 @@ struct ClientDetailSheetView: View {
                     commentsSection
                 }
                 .padding(16)
+            }
+            .onAppear {
+                engine.fetchClientProfile(phone: client.cleanPhone) { fetched in
+                    if let fetched = fetched {
+                        self.detailedProfile = fetched
+                    }
+                }
             }
             .background(Color(red: 0.95, green: 0.96, blue: 0.98).ignoresSafeArea())
             .navigationBarTitle("Detalle de Cliente", displayMode: .inline)
@@ -649,19 +678,19 @@ struct ClientDetailSheetView: View {
                 .foregroundColor(Color(red: 0.3, green: 0.35, blue: 0.45))
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                metricBox(title: "TOTAL HISTÓRICO", value: "$\(Int(profile?.totalRevenue ?? 0))", color: Color(red: 0.85, green: 0.65, blue: 0.13))
-                metricBox(title: "ÚLTIMOS 30 DÍAS", value: "$\(Int(profile?.revenue30Days ?? 0))", color: Color(red: 0.05, green: 0.65, blue: 0.45))
-                metricBox(title: "RANKING", value: profile?.found == true ? "#\(profile?.clientRank ?? 1)" : "N/A", color: Color(red: 0.05, green: 0.55, blue: 0.85))
+                metricBox(title: "TOTAL HISTÓRICO", value: "$\(Int(activeProfile?.totalRevenue ?? 0))", color: Color(red: 0.85, green: 0.65, blue: 0.13))
+                metricBox(title: "ÚLTIMOS 30 DÍAS", value: "$\(Int(activeProfile?.revenue30Days ?? 0))", color: Color(red: 0.05, green: 0.65, blue: 0.45))
+                metricBox(title: "RANKING", value: activeProfile?.found == true ? "#\(activeProfile?.clientRank ?? 1)" : "N/A", color: Color(red: 0.05, green: 0.55, blue: 0.85))
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("TOTAL SERVICIOS")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
-                    Text("\(profile?.serviceCount ?? 0)")
+                    Text("\(activeProfile?.serviceCount ?? 0)")
                         .font(.system(size: 18, weight: .black))
                         .foregroundColor(Color(red: 0.55, green: 0.25, blue: 0.85))
                     
-                    let c = profile?.counts ?? [:]
+                    let c = activeProfile?.counts ?? [:]
                     Text("SS (15m): \(c["SS"] ?? 0) | HH (30m): \(c["HH"] ?? 0)\nH (1h): \(c["H"] ?? 0) | 2H (2h): \(c["2H"] ?? 0)")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundColor(Color(red: 0.4, green: 0.45, blue: 0.55))
@@ -695,7 +724,7 @@ struct ClientDetailSheetView: View {
                 .font(.system(size: 12, weight: .black))
                 .foregroundColor(Color(red: 0.06, green: 0.45, blue: 0.75))
 
-            let techsDetail = profile?.techniciansDetail ?? []
+            let techsDetail = activeProfile?.techniciansDetail ?? []
             if techsDetail.isEmpty {
                 Text("Sin servicios previos registrados")
                     .font(.system(size: 12, weight: .medium))
@@ -759,12 +788,18 @@ struct ClientDetailSheetView: View {
                     .cornerRadius(8)
 
                 Button(action: {
-                    guard !newCommentText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    let commentToSave = newCommentText.trimmingCharacters(in: .whitespaces)
+                    guard !commentToSave.isEmpty else { return }
                     isSavingComment = true
-                    engine.addComment(phone: client.cleanPhone, comment: newCommentText) { success in
+                    engine.addComment(phone: client.cleanPhone, comment: commentToSave) { success in
                         isSavingComment = false
                         if success {
                             newCommentText = ""
+                            engine.fetchClientProfile(phone: client.cleanPhone) { fetched in
+                                if let fetched = fetched {
+                                    self.detailedProfile = fetched
+                                }
+                            }
                         }
                     }
                 }) {
@@ -779,7 +814,7 @@ struct ClientDetailSheetView: View {
             }
 
             // Lista de comentarios anteriores
-            let comments = profile?.comments ?? []
+            let comments = activeProfile?.comments ?? []
             if comments.isEmpty {
                 Text("Sin notas ni comentarios registrados.")
                     .font(.system(size: 12, weight: .medium))

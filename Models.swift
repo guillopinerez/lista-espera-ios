@@ -86,6 +86,17 @@ struct ClientContact: Identifiable, Codable, Equatable {
         return false
     }
 
+    var hasNotes: Bool {
+        if let comments = profile?.comments, !comments.isEmpty {
+            return true
+        }
+        return false
+    }
+
+    var notesCount: Int {
+        return profile?.comments?.count ?? 0
+    }
+
     var notificationTitle: String {
         if isRegistered, let name = displayName {
             return "👤 \(name.uppercased())"

@@ -295,6 +295,106 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         )
     }
 
+    // Consultar Perfil Enriquecido Individual del Cliente (con Ranking Histórico y Notas)
+    func fetchClientProfile(phone: String, completion: @escaping (ClientProfileData?) -> Void) {
+        let clean = phone.replacingOccurrences(of: "[^0-9]", with: "", options: .regularExpression)
+        guard let url = URL(string: "\(serverUrl)?action=get_client&telefono=\(clean)&token=\(apiToken)&_=" + String(Date().timeIntervalSince1970)) else {
+            completion(nil)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10.0
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let data = data, error == nil else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let pDict = json["profile"] as? [String: Any] {
+                    let pFound = (pDict["found"] as? Bool) ?? false
+                    let pName = String(describing: pDict["primary_name"] ?? "No es cliente registrado")
+                    let pSvcCount = (pDict["service_count"] as? Int) ?? 0
+                    let pTotRev = (pDict["total_revenue"] as? Double) ?? (Double(pDict["total_revenue"] as? Int ?? 0))
+                    let pRev30 = (pDict["revenue_30_days"] as? Double) ?? (Double(pDict["revenue_30_days"] as? Int ?? 0))
+                    let pRank = (pDict["client_rank"] as? Int) ?? 1
+                    let pCounts = (pDict["counts"] as? [String: Int]) ?? [:]
+                    let pTechs = (pDict["technicians"] as? [String]) ?? []
+                    let pAtendidoStr = String(describing: pDict["atendido_por_str"] ?? "Sin servicios previos")
+
+                    var pTechsDetail: [TechnicianDetailItem] = []
+                    if let rawTechDetail = pDict["technicians_detail"] as? [[String: Any]] {
+                        for td in rawTechDetail {
+                            let tName = String(describing: td["tecnico"] ?? "")
+                            let tFecha = String(describing: td["fecha"] ?? "")
+                            let tTiempo = String(describing: td["tiempo"] ?? "")
+                            let tLabel = String(describing: td["tiempo_label"] ?? tTiempo)
+                            let tTarifa = td["tarifa"] as? String
+                            let tDisp = String(describing: td["display"] ?? "\(tName) • \(tFecha) • \(tLabel)")
+                            if !tName.isEmpty {
+                                pTechsDetail.append(TechnicianDetailItem(tecnico: tName, fecha: tFecha, tiempo: tTiempo, tiempoLabel: tLabel, tarifa: tTarifa, display: tDisp))
+                            }
+                        }
+                    }
+
+                    var pComments: [ClientComment] = []
+                    if let rawComms = pDict["comments"] as? [[String: Any]] {
+                        for comm in rawComms {
+                            let cId = String(describing: comm["id"] ?? UUID().uuidString)
+                            let cTxt = String(describing: comm["comentario"] ?? "")
+                            let cDate = String(describing: comm["fecha_comentario"] ?? "")
+                            pComments.append(ClientComment(id: cId, comentario: cTxt, fecha_comentario: cDate))
+                        }
+                    }
+
+                    var pConv: [TodayMessage] = []
+                    if let rawConv = pDict["conversation"] as? [[String: Any]] {
+                        for m in rawConv {
+                            let mId = String(describing: m["id"] ?? UUID().uuidString)
+                            let mMsg = String(describing: m["message"] ?? "")
+                            let mDate = String(describing: m["date"] ?? "")
+                            let mTs = (m["timestamp"] as? Double) ?? (Double(m["timestamp"] as? Int ?? 0))
+                            let mLk = String(describing: m["line_key"] ?? "RAFAELLA")
+                            let mLn = String(describing: m["line_name"] ?? mLk)
+                            let mIsToday = (m["is_today"] as? Bool) ?? true
+                            pConv.append(TodayMessage(id: mId, message: mMsg, date: mDate, timestamp: mTs, lineKey: mLk, lineName: mLn, isToday: mIsToday))
+                        }
+                    }
+
+                    let profileData = ClientProfileData(
+                        found: pFound,
+                        primaryName: pName,
+                        serviceCount: pSvcCount,
+                        totalRevenue: pTotRev,
+                        revenue30Days: pRev30,
+                        clientRank: pRank,
+                        counts: pCounts,
+                        technicians: pTechs,
+                        techniciansDetail: pTechsDetail,
+                        atendidoPorStr: pAtendidoStr,
+                        comments: pComments,
+                        conversation: pConv
+                    )
+
+                    DispatchQueue.main.async {
+                        if let idx = self?.contacts.firstIndex(where: { $0.cleanPhone == clean }) {
+                            self?.contacts[idx].profile = profileData
+                        }
+                        completion(profileData)
+                    }
+                } else {
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            } catch {
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }.resume()
+    }
+
     // Guardar nuevo comentario o nota para un cliente
     func addComment(phone: String, comment: String, completion: @escaping (Bool) -> Void) {
         guard let url = URL(string: "\(serverUrl)?action=add_comment&token=\(apiToken)") else {
@@ -313,7 +413,9 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             let success = (error == nil)
             DispatchQueue.main.async {
                 if success {
-                    self?.fetchLatestData()
+                    self?.fetchClientProfile(phone: phone) { _ in
+                        self?.fetchLatestData()
+                    }
                 }
                 completion(success)
             }
