@@ -20,6 +20,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     private var syncTimer: Timer?
     private var lastSeenEventId: String = ""
     private var isInitialLoad: Bool = true
+    private var failedAttempts: Int = 0
     private let serverUrl = "https://hotlatina4u.com/sms2/api.php"
     private let apiToken = "SAq1w2e3r4"
 
@@ -50,12 +51,12 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }
     }
 
-    // 2. Sincronización continua cada 2.5 segundos
+    // 2. Sincronización continua cada 4.0 segundos (Sincronización suave y estable)
     func startBackgroundSync() {
         syncTimer?.invalidate()
         fetchLatestData()
 
-        syncTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
             guard let strongSelf = self else { return }
             Task { @MainActor in
                 strongSelf.fetchLatestData()
@@ -69,13 +70,16 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         guard let url = URL(string: "\(serverUrl)?action=get_events&token=\(apiToken)") else { return }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 12.0
+        request.timeoutInterval = 15.0
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let data = data, error == nil else {
                 DispatchQueue.main.async {
-                    BackgroundSyncEngine.shared.serverStatus = "🔴 Sin conexión"
+                    self?.failedAttempts += 1
+                    if (self?.failedAttempts ?? 0) >= 2 {
+                        BackgroundSyncEngine.shared.serverStatus = "🔴 Sin conexión"
+                    }
                 }
                 return
             }
@@ -83,6 +87,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     DispatchQueue.main.async {
+                        self?.failedAttempts = 0
                         BackgroundSyncEngine.shared.serverStatus = "🟢 En vivo"
                         BackgroundSyncEngine.shared.lastSyncTime = Date()
                         BackgroundSyncEngine.shared.processServerPayload(json)
