@@ -87,14 +87,17 @@ struct ClientContact: Identifiable, Codable, Equatable {
     }
 
     var hasNotes: Bool {
-        if let comments = profile?.comments, !comments.isEmpty {
+        if let profile = profile, !profile.comments.isEmpty {
             return true
         }
         return false
     }
 
     var notesCount: Int {
-        return profile?.comments?.count ?? 0
+        if let profile = profile {
+            return profile.comments.count
+        }
+        return 0
     }
 
     var notificationTitle: String {
