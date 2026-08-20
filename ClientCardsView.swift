@@ -420,6 +420,9 @@ struct ClientDetailSheetView: View {
     @Environment(\.presentationMode) var presentationMode
     @State private var newCommentText: String = ""
     @State private var isSavingComment: Bool = false
+    @State private var showingEditName: Bool = false
+    @State private var newClientName: String = ""
+    @State private var isSavingName: Bool = false
 
     var profile: ClientProfileData? { client.profile }
 
@@ -454,15 +457,33 @@ struct ClientDetailSheetView: View {
 
     private var clientHeaderSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .center, spacing: 6) {
                 if client.isRegistered {
                     Text(client.notificationTitle)
-                        .font(.system(size: 18, weight: .black))
+                        .font(.system(size: 17, weight: .black))
                         .foregroundColor(Color(red: 0.12, green: 0.23, blue: 0.54))
                 } else {
                     Text("⚠️ NO ES CLIENTE REGISTRADO")
-                        .font(.system(size: 15, weight: .black))
+                        .font(.system(size: 14, weight: .black))
                         .foregroundColor(Color(red: 0.85, green: 0.2, blue: 0.2))
+                }
+
+                Button(action: {
+                    newClientName = client.displayName ?? ""
+                    withAnimation {
+                        showingEditName.toggle()
+                    }
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "pencil")
+                        Text("Editar")
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(red: 0.9, green: 0.95, blue: 1.0))
+                    .foregroundColor(Color(red: 0.12, green: 0.45, blue: 0.75))
+                    .cornerRadius(6)
                 }
 
                 Spacer()
@@ -474,6 +495,54 @@ struct ClientDetailSheetView: View {
                     .background(client.lineColor.opacity(0.12))
                     .foregroundColor(client.lineColor)
                     .cornerRadius(6)
+            }
+
+            // Formulario desplegable para cambiar nombre
+            if showingEditName {
+                HStack(spacing: 8) {
+                    TextField("Nuevo nombre del cliente...", text: $newClientName)
+                        .font(.system(size: 13, weight: .medium))
+                        .padding(8)
+                        .background(Color(red: 0.96, green: 0.97, blue: 0.99))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color(red: 0.85, green: 0.9, blue: 0.95), lineWidth: 1)
+                        )
+
+                    Button(action: {
+                        let trimmed = newClientName.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return }
+                        isSavingName = true
+                        engine.updateClientName(phone: client.cleanPhone, newName: trimmed) { success in
+                            isSavingName = false
+                            if success {
+                                withAnimation {
+                                    showingEditName = false
+                                }
+                            }
+                        }
+                    }) {
+                        Text(isSavingName ? "..." : "Guardar")
+                            .font(.system(size: 12, weight: .bold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 0.12, green: 0.23, blue: 0.54))
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+
+                    Button("Cancelar") {
+                        withAnimation {
+                            showingEditName = false
+                        }
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                }
+                .padding(8)
+                .background(Color(red: 0.98, green: 0.99, blue: 1.0))
+                .cornerRadius(10)
             }
 
             Text(client.formattedPhone)

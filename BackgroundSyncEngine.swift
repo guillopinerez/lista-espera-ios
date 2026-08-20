@@ -320,6 +320,31 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }.resume()
     }
 
+    // Actualizar nombre o alias del cliente/contacto
+    func updateClientName(phone: String, newName: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(serverUrl)?action=update_client_name&token=\(apiToken)") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: String] = ["telefono": phone, "nombre": newName]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            let success = (error == nil)
+            DispatchQueue.main.async {
+                if success {
+                    self?.fetchLatestData()
+                }
+                completion(success)
+            }
+        }.resume()
+    }
+
     // Helper: Generador de WAV Silencioso
     private func createSilentWavData() -> Data {
         var data = Data()
