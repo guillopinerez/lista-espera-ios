@@ -422,6 +422,60 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }.resume()
     }
 
+    // Modificar un comentario / nota existente
+    func updateComment(phone: String, commentId: String, newComment: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(serverUrl)?action=update_comment&token=\(apiToken)") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = ["id": commentId, "telefono": phone, "comentario": newComment]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            let success = (error == nil)
+            DispatchQueue.main.async {
+                if success {
+                    self?.fetchClientProfile(phone: phone) { _ in
+                        self?.fetchLatestData()
+                    }
+                }
+                completion(success)
+            }
+        }.resume()
+    }
+
+    // Eliminar un comentario / nota existente
+    func deleteComment(phone: String, commentId: String, completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "\(serverUrl)?action=delete_comment&token=\(apiToken)") else {
+            completion(false)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = ["id": commentId, "telefono": phone]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            let success = (error == nil)
+            DispatchQueue.main.async {
+                if success {
+                    self?.fetchClientProfile(phone: phone) { _ in
+                        self?.fetchLatestData()
+                    }
+                }
+                completion(success)
+            }
+        }.resume()
+    }
+
     // Actualizar nombre o alias del cliente/contacto
     func updateClientName(phone: String, newName: String, completion: @escaping (Bool) -> Void) {
         guard let url = URL(string: "\(serverUrl)?action=update_client_name&token=\(apiToken)") else {

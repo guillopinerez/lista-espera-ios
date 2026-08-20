@@ -443,8 +443,11 @@ struct ClientDetailSheetView: View {
     @State private var isSavingComment: Bool = false
     @State private var showingEditName: Bool = false
     @State private var newClientName: String = ""
-    @State private var isSavingName: Bool = false
-    @State private var detailedProfile: ClientProfileData? = nil
+    @State private var commentToEdit: ClientComment? = nil
+    @State private var showingEditAlert: Bool = false
+    @State private var editText: String = ""
+    @State private var commentToDelete: ClientComment? = nil
+    @State private var showingDeleteAlert: Bool = false
 
     var activeProfile: ClientProfileData? { detailedProfile ?? client.profile }
 
@@ -475,6 +478,45 @@ struct ClientDetailSheetView: View {
                         self.detailedProfile = fetched
                     }
                 }
+            }
+            .alert("Editar Nota", isPresented: $showingEditAlert) {
+                TextField("Texto de la nota", text: $editText)
+                Button("Guardar") {
+                    if let c = commentToEdit {
+                        let trimmed = editText.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return }
+                        engine.updateComment(phone: client.cleanPhone, commentId: c.id, newComment: trimmed) { success in
+                            if success {
+                                engine.fetchClientProfile(phone: client.cleanPhone) { fetched in
+                                    if let fetched = fetched {
+                                        self.detailedProfile = fetched
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Button("Cancelar", role: .cancel) { }
+            } message: {
+                Text("Modifica el contenido de esta nota:")
+            }
+            .alert("Eliminar Nota", isPresented: $showingDeleteAlert) {
+                Button("Eliminar", role: .destructive) {
+                    if let c = commentToDelete {
+                        engine.deleteComment(phone: client.cleanPhone, commentId: c.id) { success in
+                            if success {
+                                engine.fetchClientProfile(phone: client.cleanPhone) { fetched in
+                                    if let fetched = fetched {
+                                        self.detailedProfile = fetched
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Button("Cancelar", role: .cancel) { }
+            } message: {
+                Text("¿Desea eliminar permanentemente esta nota?")
             }
             .background(Color(red: 0.95, green: 0.96, blue: 0.98).ignoresSafeArea())
             .navigationBarTitle("Detalle de Cliente", displayMode: .inline)
@@ -808,12 +850,7 @@ struct ClientDetailSheetView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(Color(red: 0.12, green: 0.23, blue: 0.54))
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-            }
-
-            // Lista de comentarios anteriores
+                        // Lista de comentarios anteriores
             let comments = activeProfile?.comments ?? []
             if comments.isEmpty {
                 Text("Sin notas ni comentarios registrados.")
@@ -826,17 +863,54 @@ struct ClientDetailSheetView: View {
             } else {
                 VStack(spacing: 6) {
                     ForEach(comments) { c in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(c.comentario)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
-                            Text("🕒 \(c.fecha_comentario)")
-                                .font(.system(size: 10, weight: .regular))
-                                .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(c.comentario)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                                Text("🕒 \(c.fecha_comentario)")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: 4) {
+                                Button(action: {
+                                    commentToEdit = c
+                                    editText = c.comentario
+                                    showingEditAlert = true
+                                }) {
+                                    Text("✏️ Editar")
+                                        .font(.system(size: 10.5, weight: .bold))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color(red: 0.88, green: 0.95, blue: 1.0))
+                                        .foregroundColor(Color(red: 0.01, green: 0.41, blue: 0.63))
+                                        .cornerRadius(6)
+                                }
+
+                                Button(action: {
+                                    commentToDelete = c
+                                    showingDeleteAlert = true
+                                }) {
+                                    Text("🗑️ Borrar")
+                                        .font(.system(size: 10.5, weight: .bold))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color(red: 0.99, green: 0.88, blue: 0.88))
+                                        .foregroundColor(Color(red: 0.6, green: 0.1, blue: 0.1))
+                                        .cornerRadius(6)
+                                }
+                            }
                         }
-                        .padding(8)
+                        .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.white)
+                        .cornerRadius(8)
+                    }
+                }
+            }ground(Color.white)
                         .cornerRadius(8)
                     }
                 }

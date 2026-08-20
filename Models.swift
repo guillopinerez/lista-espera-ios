@@ -42,6 +42,38 @@ struct ClientComment: Identifiable, Codable, Equatable {
     var id: String
     var comentario: String
     var fecha_comentario: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case comentario
+        case fecha_comentario
+    }
+
+    init(id: String, comentario: String, fecha_comentario: String) {
+        self.id = id
+        self.comentario = comentario
+        self.fecha_comentario = fecha_comentario
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let stringId = try? container.decode(String.self, forKey: .id) {
+            self.id = stringId
+        } else if let intId = try? container.decode(Int.self, forKey: .id) {
+            self.id = String(intId)
+        } else {
+            self.id = UUID().uuidString
+        }
+        self.comentario = (try? container.decode(String.self, forKey: .comentario)) ?? ""
+        self.fecha_comentario = (try? container.decode(String.self, forKey: .fecha_comentario)) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(comentario, forKey: .comentario)
+        try container.encode(fecha_comentario, forKey: .fecha_comentario)
+    }
 }
 
 // Perfil Histórico Completo del Cliente
