@@ -39,9 +39,18 @@ jobs:
           # 3. Establecer permisos ejecutables
           chmod 755 build/ipa_root/Payload/ListaEspera.app/ListaEspera
           
-          # 4. Copiar Info.plist y generar PkgInfo
+          # 4. Copiar Info.plist, PkgInfo e iconos de la App
           cp CustomInfoPlist.plist build/ipa_root/Payload/ListaEspera.app/Info.plist
           printf 'APPL????' > build/ipa_root/Payload/ListaEspera.app/PkgInfo
+
+          # Copiar iconos en la raíz del paquete .app para que Sideloadly y SpringBoard los detecten
+          if [ -d "Assets.xcassets/AppIcon.appiconset" ]; then
+            cp Assets.xcassets/AppIcon.appiconset/*.png build/ipa_root/Payload/ListaEspera.app/ 2>/dev/null || true
+            cp Assets.xcassets/AppIcon.appiconset/icon_1024.png build/ipa_root/Payload/ListaEspera.app/AppIcon60x60@3x.png 2>/dev/null || true
+            cp Assets.xcassets/AppIcon.appiconset/icon_1024.png build/ipa_root/Payload/ListaEspera.app/AppIcon60x60@2x.png 2>/dev/null || true
+            cp Assets.xcassets/AppIcon.appiconset/icon_1024.png build/ipa_root/Payload/ListaEspera.app/AppIcon76x76@2x~ipad.png 2>/dev/null || true
+            cp Assets.xcassets/AppIcon.appiconset/icon_1024.png build/ipa_root/Payload/ListaEspera.app/AppIcon.png 2>/dev/null || true
+          fi
 
           # 5. Comprimir paquete .ipa
           cd build/ipa_root
