@@ -15,7 +15,7 @@ let package = Package(
             bundleIdentifier: "com.amoravias.listadeespera",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .asset("AppIcon"),
+            appIcon: .placeholder(icon: .list),
             accentColor: .presetColor(.blue),
             supportedDeviceFamilies: [
                 .pad,
