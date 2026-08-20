@@ -852,64 +852,82 @@ struct ClientDetailSheetView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .background(Color(red: 0.12, green: 0.23, blue: 0.54))
-                        // Lista de comentarios anteriores
+                        // Lista de comentarios anteriores (Diseño Vertical Amplio y Legible)
             let comments = activeProfile?.comments ?? []
             if comments.isEmpty {
                 Text("Sin notas ni comentarios registrados.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
-                    .padding(10)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white)
                     .cornerRadius(10)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: 10) {
                     ForEach(comments) { c in
-                        HStack(alignment: .top, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(c.comentario)
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(Color(red: 0.1, green: 0.15, blue: 0.25))
+                        VStack(alignment: .leading, spacing: 10) {
+                            // 1. Texto completo de la nota bien amplio, claro y legible
+                            Text(c.comentario)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(Color(red: 0.08, green: 0.12, blue: 0.22))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Divider()
+
+                            // 2. Fila inferior: Timestamp a la izquierda + Botones Editar/Borrar a la derecha
+                            HStack(alignment: .center) {
                                 Text("🕒 \(c.fecha_comentario)")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
-                            }
+                                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(red: 0.45, green: 0.5, blue: 0.6))
 
-                            Spacer()
+                                Spacer()
 
-                            HStack(spacing: 4) {
-                                Button(action: {
-                                    commentToEdit = c
-                                    editText = c.comentario
-                                    showingEditAlert = true
-                                }) {
-                                    Text("✏️ Editar")
-                                        .font(.system(size: 10.5, weight: .bold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
+                                HStack(spacing: 8) {
+                                    Button(action: {
+                                        commentToEdit = c
+                                        editText = c.comentario
+                                        showingEditAlert = true
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "pencil")
+                                            Text("Editar")
+                                        }
+                                        .font(.system(size: 11.5, weight: .bold))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
                                         .background(Color(red: 0.88, green: 0.95, blue: 1.0))
                                         .foregroundColor(Color(red: 0.01, green: 0.41, blue: 0.63))
                                         .cornerRadius(6)
-                                }
+                                    }
 
-                                Button(action: {
-                                    commentToDelete = c
-                                    showingDeleteAlert = true
-                                }) {
-                                    Text("🗑️ Borrar")
-                                        .font(.system(size: 10.5, weight: .bold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
+                                    Button(action: {
+                                        commentToDelete = c
+                                        showingDeleteAlert = true
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "trash")
+                                            Text("Borrar")
+                                        }
+                                        .font(.system(size: 11.5, weight: .bold))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
                                         .background(Color(red: 0.99, green: 0.88, blue: 0.88))
                                         .foregroundColor(Color(red: 0.6, green: 0.1, blue: 0.1))
                                         .cornerRadius(6)
+                                    }
                                 }
                             }
                         }
-                        .padding(10)
+                        .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.white)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.85, green: 0.9, blue: 0.95), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
                     }
                 }
             }
