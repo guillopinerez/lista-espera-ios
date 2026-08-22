@@ -33,25 +33,41 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         return URLSession(configuration: config)
     }()
 
+    private var dispatchTimer: DispatchSourceTimer?
+    private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
+
     override init() {
         super.init()
         setupAudioKeepAlive()
-        setupForegroundObservers()
+        setupLifecycleObservers()
         startBackgroundSync()
     }
 
-    // 1. Escuchadores de Regreso a Primer Plano (Al encender pantalla o desbloquear iPhone)
-    private func setupForegroundObservers() {
-        NotificationCenter.default.addObserver(
+    // 1. Escuchadores de Ciclo de Vida e Interrupciones de Audio
+    private func setupLifecycleObservers() {
+        let nc = NotificationCenter.default
+        nc.addObserver(
             self,
             selector: #selector(handleAppForeground),
             name: UIApplication.willEnterForegroundNotification,
             object: nil
         )
-        NotificationCenter.default.addObserver(
+        nc.addObserver(
             self,
             selector: #selector(handleAppForeground),
             name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        nc.addObserver(
+            self,
+            selector: #selector(handleDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        nc.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption),
+            name: AVAudioSession.interruptionNotification,
             object: nil
         )
     }
@@ -59,24 +75,59 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     @objc private func handleAppForeground() {
         Task { @MainActor in
             self.failedAttempts = 0
+            if self.bgTaskId != .invalid {
+                UIApplication.shared.endBackgroundTask(self.bgTaskId)
+                self.bgTaskId = .invalid
+            }
             self.startBackgroundSync()
         }
     }
 
-    // 2. Audio Keep-Alive Silencioso (Permite ejecución 24/7 con pantalla bloqueada)
+    @objc private func handleDidEnterBackground() {
+        bgTaskId = UIApplication.shared.beginBackgroundTask(withName: "ListaEsperaKeepAlive") { [weak self] in
+            if let id = self?.bgTaskId, id != .invalid {
+                UIApplication.shared.endBackgroundTask(id)
+                self?.bgTaskId = .invalid
+            }
+        }
+
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            if self.audioPlayer?.isPlaying == false {
+                self.audioPlayer?.play()
+            }
+        } catch {
+            print("Error reactivando audio en segundo plano: \(error)")
+        }
+    }
+
+    @objc private func handleAudioInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        if type == .ended {
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+                audioPlayer?.play()
+            } catch {}
+        }
+    }
+
+    // 2. Audio Keep-Alive Silencioso 24/7 (Playback dedicado sin suspension de iOS)
     private func setupAudioKeepAlive() {
         do {
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
                 mode: .default,
-                options: [.mixWithOthers, .duckOthers]
+                options: [.mixWithOthers]
             )
             try AVAudioSession.sharedInstance().setActive(true)
 
             let silentWavData = createSilentWavData()
             audioPlayer = try AVAudioPlayer(data: silentWavData)
             audioPlayer?.numberOfLoops = -1
-            audioPlayer?.volume = 0.01
+            audioPlayer?.volume = 0.05
             audioPlayer?.play()
             print("🔊 Audio Keep-Alive en segundo plano activado")
         } catch {
@@ -84,11 +135,13 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }
     }
 
-    // 3. Sincronización continua cada 3.5 segundos (Sincronización suave y estable)
+    // 3. Sincronización continua de fondo con DispatchSourceTimer (inmune a congelamiento de UI Main Loop)
     func startBackgroundSync() {
         syncTimer?.invalidate()
+        dispatchTimer?.cancel()
         fetchLatestData()
 
+        // Timer de Main Loop para interfaz cuando la app está activa
         syncTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { [weak self] _ in
             guard let strongSelf = self else { return }
             Task { @MainActor in
@@ -96,6 +149,21 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             }
         }
         RunLoop.main.add(syncTimer!, forMode: .common)
+
+        // Timer de Hilo Secundario de Dispatch para segundo plano constante con pantalla bloqueada
+        let queue = DispatchQueue(label: "com.amoravias.listadeespera.sync", qos: .background)
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 3.5, repeating: .seconds(3), leeway: .milliseconds(300))
+        timer.setEventHandler { [weak self] in
+            guard let self = self else { return }
+            if self.audioPlayer?.isPlaying == false {
+                try? AVAudioSession.sharedInstance().setActive(true)
+                self.audioPlayer?.play()
+            }
+            self.fetchLatestData()
+        }
+        timer.resume()
+        self.dispatchTimer = timer
     }
 
     // 4. Consulta de Eventos, Cola y Contactos al Servidor
