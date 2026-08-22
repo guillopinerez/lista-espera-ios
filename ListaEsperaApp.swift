@@ -16,12 +16,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let title = notification.request.content.title
         if title.contains("CLIENTE") || title.contains("🌟") {
-            AudioServicesPlaySystemSound(1025) // 🌟 Campana VIP doble alegre para Cliente Registrado
+            AudioServicesPlaySystemSound(1057) // 🌟 Tink / Cristalino Ultracorto para Cliente Registrado (~0.18s)
         } else {
-            AudioServicesPlaySystemSound(1007) // 📱 Sonido de notificación estándar para Contacto Nuevo
+            AudioServicesPlaySystemSound(1104) // 📱 Tock / Pop Corto para Contacto Nuevo (~0.12s)
         }
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
-        completionHandler([.banner, .sound, .badge, .list])
+        completionHandler([.banner, .badge, .list])
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {

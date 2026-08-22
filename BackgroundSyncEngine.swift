@@ -348,7 +348,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }
     }
 
-    // 5. Emisión de Notificación de iOS con Formato Profesional y Sonido Diferenciado por Perfil
+    // 5. Emisión de Notificación de iOS con Formato Profesional y Sonidos Ultracortos por Perfil
     func triggerPushNotification(phone: String, message: String, line: String, clientName: String? = nil, isClient: Bool = false) {
         let content = UNMutableNotificationContent()
         
@@ -357,10 +357,10 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         if isRegistered {
             let nameTxt = clientName ?? "CLIENTE REGISTRADO"
             content.title = "🌟 CLIENTE: \(nameTxt.uppercased())"
-            AudioServicesPlaySystemSound(1025) // 🌟 Campana VIP alegre / Doble tono en iOS (SystemSoundID 1025)
+            AudioServicesPlaySystemSound(1057) // 🌟 SystemSoundID 1057: Tink / Cristalino Ultracorto (~0.18s)
         } else {
             content.title = "📱 SMS NUEVO [\(line.uppercased())]"
-            AudioServicesPlaySystemSound(1007) // 📱 Sonido de notificación de mensaje estándar (SystemSoundID 1007)
+            AudioServicesPlaySystemSound(1104) // 📱 SystemSoundID 1104: Tock / Pop Corto (~0.12s)
         }
 
         // 2. SUBTÍTULO: Línea receptora y Teléfono
@@ -369,7 +369,6 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         // 3. CUERPO: Mensaje SMS recibido
         content.body = "\"\(message)\""
         
-        content.sound = UNNotificationSound.default
         content.badge = NSNumber(value: self.unreadTotal + 1)
         content.userInfo = ["phone": phone, "line": line, "is_client": isRegistered]
 
