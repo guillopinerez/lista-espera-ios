@@ -24,13 +24,46 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     private let serverUrl = "https://hotlatina4u.com/sms2/api.php"
     private let apiToken = "SAq1w2e3r4"
 
+    private lazy var customSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 8.0
+        config.timeoutIntervalForResource = 12.0
+        config.waitsForConnectivity = false
+        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return URLSession(configuration: config)
+    }()
+
     override init() {
         super.init()
         setupAudioKeepAlive()
+        setupForegroundObservers()
         startBackgroundSync()
     }
 
-    // 1. Audio Keep-Alive Silencioso (Permite ejecución 24/7 con pantalla bloqueada)
+    // 1. Escuchadores de Regreso a Primer Plano (Al encender pantalla o desbloquear iPhone)
+    private func setupForegroundObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppForeground),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleAppForeground() {
+        Task { @MainActor in
+            self.failedAttempts = 0
+            self.startBackgroundSync()
+        }
+    }
+
+    // 2. Audio Keep-Alive Silencioso (Permite ejecución 24/7 con pantalla bloqueada)
     private func setupAudioKeepAlive() {
         do {
             try AVAudioSession.sharedInstance().setCategory(
@@ -51,12 +84,12 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }
     }
 
-    // 2. Sincronización continua cada 4.0 segundos (Sincronización suave y estable)
+    // 3. Sincronización continua cada 3.5 segundos (Sincronización suave y estable)
     func startBackgroundSync() {
         syncTimer?.invalidate()
         fetchLatestData()
 
-        syncTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: true) { [weak self] _ in
             guard let strongSelf = self else { return }
             Task { @MainActor in
                 strongSelf.fetchLatestData()
@@ -65,19 +98,20 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         RunLoop.main.add(syncTimer!, forMode: .common)
     }
 
-    // 3. Consulta de Eventos, Cola y Contactos al Servidor
+    // 4. Consulta de Eventos, Cola y Contactos al Servidor
     func fetchLatestData() {
-        guard let url = URL(string: "\(serverUrl)?action=get_events&token=\(apiToken)") else { return }
+        guard let url = URL(string: "\(serverUrl)?action=get_events&token=\(apiToken)&_=\(Date().timeIntervalSince1970)") else { return }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15.0
+        request.timeoutInterval = 8.0
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        customSession.dataTask(with: request) { [weak self] data, response, error in
             guard let data = data, error == nil else {
                 DispatchQueue.main.async {
                     self?.failedAttempts += 1
-                    if (self?.failedAttempts ?? 0) >= 2 {
+                    // Solo cambiar a Sin conexión tras 4 fallos consecutivos reales (evita pestañeos en iOS)
+                    if (self?.failedAttempts ?? 0) >= 4 {
                         BackgroundSyncEngine.shared.serverStatus = "🔴 Sin conexión"
                     }
                 }
