@@ -348,17 +348,19 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         }
     }
 
-    // 5. Emisión de Notificación de iOS con Formato Profesional y Datos Claves
+    // 5. Emisión de Notificación de iOS con Formato Profesional y Sonido Diferenciado por Perfil
     func triggerPushNotification(phone: String, message: String, line: String, clientName: String? = nil, isClient: Bool = false) {
         let content = UNMutableNotificationContent()
         
-        // 1. TÍTULO CLAVE: Nombre del cliente o "⚠️ NO ES CLIENTE"
-        if let name = clientName, !name.isEmpty, name != "No es cliente registrado", name != "NO ES CLIENTE" {
-            content.title = "👤 \(name.uppercased())"
-        } else if isClient {
-            content.title = "👤 CLIENTE REGISTRADO"
+        let isRegistered = isClient || (clientName != nil && !clientName!.isEmpty && clientName != "No es cliente registrado" && clientName != "NO ES CLIENTE")
+
+        if isRegistered {
+            let nameTxt = clientName ?? "CLIENTE REGISTRADO"
+            content.title = "🌟 CLIENTE: \(nameTxt.uppercased())"
+            AudioServicesPlaySystemSound(1025) // 🌟 Campana VIP alegre / Doble tono en iOS (SystemSoundID 1025)
         } else {
-            content.title = "⚠️ NO ES CLIENTE"
+            content.title = "📱 SMS NUEVO [\(line.uppercased())]"
+            AudioServicesPlaySystemSound(1007) // 📱 Sonido de notificación de mensaje estándar (SystemSoundID 1007)
         }
 
         // 2. SUBTÍTULO: Línea receptora y Teléfono
@@ -369,10 +371,8 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         
         content.sound = UNNotificationSound.default
         content.badge = NSNumber(value: self.unreadTotal + 1)
-        content.userInfo = ["phone": phone, "line": line]
+        content.userInfo = ["phone": phone, "line": line, "is_client": isRegistered]
 
-        // Sonido del sistema y vibración táptica
-        AudioServicesPlaySystemSound(1007)
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
 
         // Entrega inmediata (trigger: nil)
