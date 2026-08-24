@@ -15,6 +15,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     @Published var lastSyncTime: Date = Date()
     @Published var serverStatus: String = "🟢 Conectado"
     @Published var unreadTotal: Int = 0
+    @Published var lineColorsMap: [String: String] = [:]
 
     private var audioPlayer: AVAudioPlayer?
     private var syncTimer: Timer?
@@ -202,11 +203,36 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     }
 
     // 4. Procesamiento Integral de Contactos con Conversación Unificada y Detección de Nuevos Eventos
-    func processServerPayload(_ json: [String: Any]) {
-        // A. Cargar lista de contactos históricos y actuales
-        var parsedContacts: [ClientContact] = []
-        let rawContacts = json["contacts"] as? [[String: Any]] ?? []
-        let queueItems = json["queue"] as? [[String: Any]] ?? []
+        // 0. Cargar líneas dinámicas y mapa de colores desde el servidor
+        var dynamicLineNames: [String] = ["TODAS"]
+        var colorsMap: [String: String] = [:]
+
+        if let rawLines = json["lines"] as? [String: [String: Any]] {
+            for (key, conf) in rawLines {
+                let isActive = (conf["active"] as? Bool) ?? true
+                let name = String(describing: conf["name"] ?? key).trimmingCharacters(in: .whitespacesAndNewlines)
+                let color = String(describing: conf["color"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if isActive && !name.isEmpty {
+                    if !dynamicLineNames.contains(name) {
+                        dynamicLineNames.append(name)
+                    }
+                }
+                if !color.isEmpty {
+                    colorsMap[key.uppercased()] = color
+                    colorsMap[name.uppercased()] = color
+                }
+            }
+        }
+
+        let updatedLines = dynamicLineNames
+        let updatedColors = colorsMap
+        DispatchQueue.main.async {
+            if updatedLines.count > 1 {
+                self.activeLines = updatedLines
+            }
+            self.lineColorsMap = updatedColors
+        }
 
         for c in rawContacts {
             let rawP = String(describing: c["raw_phone"] ?? c["clean_phone"] ?? "")
@@ -216,7 +242,10 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             let phone = rawP.isEmpty ? cleanP : rawP
             let clientName = c["client_name"] as? String
             let lastMsg = String(describing: c["latest_message"] ?? "")
-            let line = String(describing: c["line_name"] ?? c["line_key"] ?? "GENERAL")
+            let rawLineKey = String(describing: c["line_key"] ?? "")
+            let rawLineName = String(describing: c["line_name"] ?? c["line_key"] ?? "GENERAL")
+            let line = rawLineName.isEmpty ? (rawLineKey.isEmpty ? "GENERAL" : rawLineKey) : rawLineName
+            let hexColor = colorsMap[line.uppercased()] ?? colorsMap[rawLineKey.uppercased()]
             let ts = (c["latest_timestamp"] as? Double) ?? (Double(c["latest_timestamp"] as? Int ?? 0))
             let atendido = c["atendido_por"] as? String
             let reqTime = c["detected_time"] as? String
@@ -314,7 +343,8 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 waitingSince: ts,
                 unreadCount: 1,
                 todayMessages: todayMsgs,
-                profile: profData
+                profile: profData,
+                lineHexColor: hexColor
             )
             parsedContacts.append(contact)
         }

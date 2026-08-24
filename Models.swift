@@ -166,7 +166,12 @@ struct ClientContact: Identifiable, Codable, Equatable {
         return "hace \(hours) h"
     }
 
+    var lineHexColor: String?
+
     var lineColor: Color {
+        if let hex = lineHexColor, !hex.isEmpty {
+            return Color(hex: hex)
+        }
         let u = lastLine.uppercased()
         if u.contains("RAFAELLA") { return Color(red: 0.745, green: 0.071, blue: 0.235) } // #be123c
         if u.contains("EMILIA") { return Color(red: 0.114, green: 0.306, blue: 0.847) }   // #1d4ed8
@@ -174,5 +179,32 @@ struct ClientContact: Identifiable, Codable, Equatable {
         if u.contains("PEDRO") { return Color(red: 0.016, green: 0.471, blue: 0.341) }    // #047857
         if u.contains("CARLOS") { return Color(red: 0.427, green: 0.157, blue: 0.851) }   // #6d28d9
         return Color.blue
+    }
+}
+
+extension Color {
+    init(hex: String) {
+        let hexClean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hexClean).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hexClean.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (255, 59, 130, 246)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
     }
 }

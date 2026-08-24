@@ -10,7 +10,11 @@ struct ClientCardsView: View {
         if engine.selectedLine == "TODAS" {
             return engine.contacts
         }
-        return engine.contacts.filter { $0.lastLine.uppercased().contains(engine.selectedLine.uppercased()) }
+        let sel = engine.selectedLine.uppercased()
+        return engine.contacts.filter { contact in
+            let line = contact.lastLine.uppercased()
+            return line == sel || line.contains(sel) || sel.contains(line)
+        }
     }
 
     var body: some View {
