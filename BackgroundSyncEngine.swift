@@ -9,7 +9,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     static let shared = BackgroundSyncEngine()
 
     @Published var contacts: [ClientContact] = []
-    @Published var activeLines: [String] = ["TODAS", "EMILIA", "RAFAELLA", "NATALIA", "PEDRO TECNICO", "CARLOS"]
+    @Published var activeLines: [String] = ["TODAS"]
     @Published var selectedLine: String = "TODAS"
     @Published var isSyncing: Bool = false
     @Published var lastSyncTime: Date = Date()
@@ -209,31 +209,11 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         let rawContacts = json["contacts"] as? [[String: Any]] ?? []
         let queueItems = json["queue"] as? [[String: Any]] ?? []
 
-        // 0. Cargar líneas dinámicas y mapa de colores desde el servidor (mantenimiento de orden ESTÁTICO y QUIETO)
-        let canonicalOrder = ["TODAS", "RAFAELLA", "EMILIA", "NATALIA", "PEDRO TECNICO", "CARLOS"]
+        // 0. Cargar líneas dinámicas y mapa de colores 100% desde el servidor (SIN nombres antiguos forzados)
         var dynamicLineNames: [String] = ["TODAS"]
         var colorsMap: [String: String] = [:]
 
         if let rawLines = json["lines"] as? [String: [String: Any]] {
-            for canKey in canonicalOrder {
-                if canKey == "TODAS" { continue }
-                if let conf = rawLines[canKey] ?? rawLines[canKey.replacingOccurrences(of: " TECNICO", with: "")] {
-                    let isActive = (conf["active"] as? Bool) ?? true
-                    let name = String(describing: conf["name"] ?? canKey).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let color = String(describing: conf["color"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    
-                    if isActive && !name.isEmpty {
-                        if !dynamicLineNames.contains(name) {
-                            dynamicLineNames.append(name)
-                        }
-                    }
-                    if !color.isEmpty {
-                        colorsMap[canKey.uppercased()] = color
-                        colorsMap[name.uppercased()] = color
-                    }
-                }
-            }
-
             for (key, conf) in rawLines {
                 let isActive = (conf["active"] as? Bool) ?? true
                 let name = String(describing: conf["name"] ?? key).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -247,6 +227,8 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 if !color.isEmpty {
                     colorsMap[key.uppercased()] = color
                     colorsMap[name.uppercased()] = color
+                    colorsMap[key] = color
+                    colorsMap[name] = color
                 }
             }
         }
