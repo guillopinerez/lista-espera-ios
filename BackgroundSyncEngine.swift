@@ -203,6 +203,12 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
     }
 
     // 4. Procesamiento Integral de Contactos con Conversación Unificada y Detección de Nuevos Eventos
+    func processServerPayload(_ json: [String: Any]) {
+        // A. Cargar lista de contactos históricos y actuales
+        var parsedContacts: [ClientContact] = []
+        let rawContacts = json["contacts"] as? [[String: Any]] ?? []
+        let queueItems = json["queue"] as? [[String: Any]] ?? []
+
         // 0. Cargar líneas dinámicas y mapa de colores desde el servidor
         var dynamicLineNames: [String] = ["TODAS"]
         var colorsMap: [String: String] = [:]
