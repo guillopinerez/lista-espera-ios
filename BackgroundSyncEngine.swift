@@ -209,11 +209,31 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         let rawContacts = json["contacts"] as? [[String: Any]] ?? []
         let queueItems = json["queue"] as? [[String: Any]] ?? []
 
-        // 0. Cargar líneas dinámicas y mapa de colores desde el servidor
+        // 0. Cargar líneas dinámicas y mapa de colores desde el servidor (mantenimiento de orden ESTÁTICO y QUIETO)
+        let canonicalOrder = ["TODAS", "RAFAELLA", "EMILIA", "NATALIA", "PEDRO TECNICO", "CARLOS"]
         var dynamicLineNames: [String] = ["TODAS"]
         var colorsMap: [String: String] = [:]
 
         if let rawLines = json["lines"] as? [String: [String: Any]] {
+            for canKey in canonicalOrder {
+                if canKey == "TODAS" { continue }
+                if let conf = rawLines[canKey] ?? rawLines[canKey.replacingOccurrences(of: " TECNICO", with: "")] {
+                    let isActive = (conf["active"] as? Bool) ?? true
+                    let name = String(describing: conf["name"] ?? canKey).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let color = String(describing: conf["color"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    if isActive && !name.isEmpty {
+                        if !dynamicLineNames.contains(name) {
+                            dynamicLineNames.append(name)
+                        }
+                    }
+                    if !color.isEmpty {
+                        colorsMap[canKey.uppercased()] = color
+                        colorsMap[name.uppercased()] = color
+                    }
+                }
+            }
+
             for (key, conf) in rawLines {
                 let isActive = (conf["active"] as? Bool) ?? true
                 let name = String(describing: conf["name"] ?? key).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -234,7 +254,7 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
         let updatedLines = dynamicLineNames
         let updatedColors = colorsMap
         DispatchQueue.main.async {
-            if updatedLines.count > 1 {
+            if self.activeLines != updatedLines {
                 self.activeLines = updatedLines
             }
             self.lineColorsMap = updatedColors
@@ -366,9 +386,11 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
             let evId = String(describing: topEvent["id"] ?? "")
             let evPhone = String(describing: topEvent["raw_phone"] ?? topEvent["clean_phone"] ?? "")
             let evMsg = String(describing: topEvent["message"] ?? "")
-            let evLine = String(describing: topEvent["line_key"] ?? topEvent["device_model"] ?? "GENERAL")
+            let evLineKey = String(describing: topEvent["line_key"] ?? "")
+            let evLineName = String(describing: topEvent["line_name"] ?? topEvent["device_model"] ?? evLineKey)
+            let resolvedLine = evLineName.isEmpty ? (evLineKey.isEmpty ? "GENERAL" : evLineKey) : evLineName
             
-            // Buscar perfil del cliente para el nombre de la notificación
+            // Buscar perfil del cliente para la notificación
             let evProf = topEvent["profile"] as? [String: Any]
             let evName = evProf?["primary_name"] as? String
             let evFound = (evProf?["found"] as? Bool) ?? false
@@ -377,37 +399,54 @@ class BackgroundSyncEngine: NSObject, ObservableObject {
                 lastSeenEventId = evId
                 isInitialLoad = false
             } else if !evId.isEmpty && evId != lastSeenEventId && !evMsg.isEmpty {
-                // 🔔 ¡NUEVO MENSAJE SMS RECIBIDO! Disparar Notificación de iOS
+                // 🔔 ¡NUEVO MENSAJE SMS RECIBIDO! Disparar Notificación Push
                 lastSeenEventId = evId
-                triggerPushNotification(phone: evPhone, message: evMsg, line: evLine, clientName: evName, isClient: evFound)
+                triggerPushNotification(phone: evPhone, message: evMsg, line: resolvedLine, clientName: evName, isClient: evFound)
             }
         }
     }
 
-    // 5. Emisión de Notificación de iOS con Formato Profesional y Sonidos Ultracortos por Perfil
+    private func formatPhoneNumber(_ raw: String) -> String {
+        let cleaned = raw.replacingOccurrences(of: "[^0-9+]", with: "", options: .regularExpression)
+        if cleaned.hasPrefix("+1") && cleaned.count == 12 {
+            let area = cleaned.dropFirst(2).prefix(3)
+            let mid = cleaned.dropFirst(5).prefix(3)
+            let end = cleaned.dropFirst(8).prefix(4)
+            return "+1 (\(area)) \(mid)-\(end)"
+        }
+        if cleaned.count == 10 {
+            let area = cleaned.prefix(3)
+            let mid = cleaned.dropFirst(3).prefix(3)
+            let end = cleaned.dropFirst(6).prefix(4)
+            return "+1 (\(area)) \(mid)-\(end)"
+        }
+        return raw
+    }
+
+    // 5. Emisión de Notificación de iOS con Formato Estructurado Solicitado
     func triggerPushNotification(phone: String, message: String, line: String, clientName: String? = nil, isClient: Bool = false) {
         let content = UNMutableNotificationContent()
         
         let isRegistered = isClient || (clientName != nil && !clientName!.isEmpty && clientName != "No es cliente registrado" && clientName != "NO ES CLIENTE")
+        let formattedP = formatPhoneNumber(phone)
 
+        // 1. TÍTULO AL INICIO: CLIENTE o NUEVO + Nombre + Teléfono
         if isRegistered {
-            let nameTxt = clientName ?? "CLIENTE REGISTRADO"
-            content.title = "🌟 CLIENTE: \(nameTxt.uppercased())"
-            AudioServicesPlaySystemSound(1057) // 🌟 SystemSoundID 1057: Tink / Cristalino Ultracorto (~0.18s)
+            let nameTxt = (clientName ?? "CLIENTE REGISTRADO").uppercased()
+            content.title = "🌟 CLIENTE: \(nameTxt) • \(formattedP)"
+            AudioServicesPlaySystemSound(1057) // Tink / Cristalino Ultracorto (~0.18s)
         } else {
-            content.title = "📱 SMS NUEVO [\(line.uppercased())]"
-            AudioServicesPlaySystemSound(1104) // 📱 SystemSoundID 1104: Tock / Pop Corto (~0.12s)
+            content.title = "📱 NUEVO | \(formattedP)"
+            AudioServicesPlaySystemSound(1104) // Tock / Pop Corto (~0.12s)
         }
 
-        // 2. SUBTÍTULO: Línea receptora y Teléfono
-        content.subtitle = "📱 Línea: \(line.uppercased()) • \(phone)"
+        // 2. SUBTÍTULO: Luego la línea
+        content.subtitle = "📱 Línea: \(line.uppercased())"
 
-        // 3. CUERPO: Mensaje SMS recibido
-        content.body = "\"\(message)\""
+        // 3. CUERPO: Por último el mensaje
+        content.body = "💬 \"\(message)\""
         
         content.badge = NSNumber(value: self.unreadTotal + 1)
-        content.userInfo = ["phone": phone, "line": line, "is_client": isRegistered]
-
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
 
         // Entrega inmediata (trigger: nil)
